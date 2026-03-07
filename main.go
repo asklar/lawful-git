@@ -403,11 +403,13 @@ func showConsentDialog(msg, justification string, args []string) bool {
 // showDialogWindows calls Win32 MessageBox via PowerShell's Windows Forms.
 // Falls back to terminal prompt if PowerShell is unavailable.
 func showDialogWindows(prompt string) bool {
+	escaped := strings.ReplaceAll(prompt, `"`, "`\"")
+	escaped = strings.ReplaceAll(escaped, "\n", "`n")
 	script := fmt.Sprintf(
 		`Add-Type -AssemblyName System.Windows.Forms; `+
-			`$result = [System.Windows.Forms.MessageBox]::Show('%s', 'lawful-git', 'YesNo', 'Warning'); `+
-			`if ($result -eq 'Yes') { exit 0 } else { exit 1 }`,
-		strings.ReplaceAll(strings.ReplaceAll(prompt, "'", "''"), "\n", "`n"))
+			`$result = [System.Windows.Forms.MessageBox]::Show("%s", "lawful-git", "YesNo", "Warning"); `+
+			`if ($result -eq "Yes") { exit 0 } else { exit 1 }`,
+		escaped)
 	cmd := exec.Command("powershell", "-NoProfile", "-Command", script)
 	err := cmd.Run()
 	if err == nil {
@@ -463,11 +465,12 @@ func showDialogLinux(prompt string) bool {
 
 // showDialogWSL calls powershell.exe to show a Windows-native MessageBox from WSL.
 func showDialogWSL(prompt string) bool {
-	escaped := strings.ReplaceAll(strings.ReplaceAll(prompt, "'", "''"), "\n", "`n")
+	escaped := strings.ReplaceAll(prompt, `"`, "`\"")
+	escaped = strings.ReplaceAll(escaped, "\n", "`n")
 	script := fmt.Sprintf(
 		`Add-Type -AssemblyName System.Windows.Forms; `+
-			`$result = [System.Windows.Forms.MessageBox]::Show('%s', 'lawful-git', 'YesNo', 'Warning'); `+
-			`if ($result -eq 'Yes') { exit 0 } else { exit 1 }`,
+			`$result = [System.Windows.Forms.MessageBox]::Show("%s", "lawful-git", "YesNo", "Warning"); `+
+			`if ($result -eq "Yes") { exit 0 } else { exit 1 }`,
 		escaped)
 	cmd := exec.Command("powershell.exe", "-NoProfile", "-Command", script)
 	err := cmd.Run()
