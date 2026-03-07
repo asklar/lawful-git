@@ -37,4 +37,4 @@ All logic lives in `main.go` — there are no packages or subdirectories. The fl
 - `block()` is the single exit path for violations — it prints `❌ BLOCKED: <message>` to stderr and exits 1. Tests rely on this exact prefix.
 - Cross-platform: the binary must compile for Linux, macOS, and Windows. `execRealGit()` handles the platform split. The `go.mod` targets Go 1.21 with zero external dependencies.
 - **Fail-closed on config errors**: if `.git-safety.json` exists but is malformed, lawful-git exits with an error rather than silently disabling rules.
-- The repo's own `.git-safety.json` is a real config that dogfoods the tool — it restricts operations to the `vhagar/` path prefix and blocks destructive commands.
+- The repo's own `.git-safety.json` is a real config that dogfoods the tool — it restricts operations to the `my-project/` path prefix and blocks destructive commands.

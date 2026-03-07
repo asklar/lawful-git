@@ -44,19 +44,19 @@ export GIT_CONFIG_GLOBAL="$GIT_CONFIG_GLOBAL_FILE"
 "$REAL_GIT" -C "$REPO" remote add origin "$REMOTE"
 
 # Create initial files
-mkdir -p "$REPO/vhagar" "$REPO/other"
-echo "vhagar initial" > "$REPO/vhagar/file.txt"
+mkdir -p "$REPO/my-project" "$REPO/other"
+echo "my-project initial" > "$REPO/my-project/file.txt"
 echo "other initial"  > "$REPO/other/file.txt"
 
 # Make initial commits (need 3+ so reset --soft HEAD~1 works later)
 "$REAL_GIT" -C "$REPO" add .
 "$REAL_GIT" -C "$REPO" commit -m "commit 1: initial"
-echo "vhagar v2" >> "$REPO/vhagar/file.txt"
-"$REAL_GIT" -C "$REPO" add vhagar/file.txt
-"$REAL_GIT" -C "$REPO" commit -m "commit 2: vhagar update"
-echo "vhagar v3" >> "$REPO/vhagar/file.txt"
-"$REAL_GIT" -C "$REPO" add vhagar/file.txt
-"$REAL_GIT" -C "$REPO" commit -m "commit 3: vhagar update 2"
+echo "my-project v2" >> "$REPO/my-project/file.txt"
+"$REAL_GIT" -C "$REPO" add my-project/file.txt
+"$REAL_GIT" -C "$REPO" commit -m "commit 2: my-project update"
+echo "my-project v3" >> "$REPO/my-project/file.txt"
+"$REAL_GIT" -C "$REPO" add my-project/file.txt
+"$REAL_GIT" -C "$REPO" commit -m "commit 3: my-project update 2"
 
 # Push to fake remote to establish tracking
 "$REAL_GIT" -C "$REPO" push -u origin main
@@ -175,73 +175,73 @@ echo "=== blocked (flag_in_bundle) ==="
 assert_blocked "git commit -a -m blocked"   git -C "$REPO" commit -a -m "test"
 assert_blocked "git commit -am blocked"     git -C "$REPO" commit -am "test"
 # Stage a new file so 'git commit -m' succeeds
-echo "staged content" > "$REPO/vhagar/staged.txt"
-"$REAL_GIT" -C "$REPO" add vhagar/staged.txt
+echo "staged content" > "$REPO/my-project/staged.txt"
+"$REAL_GIT" -C "$REPO" add my-project/staged.txt
 assert_allowed "git commit -m allowed"      git -C "$REPO" commit -m "test commit"
 
 # ── require ───────────────────────────────────────────────────────────────────
 echo ""
 echo "=== require ==="
-assert_blocked "git restore somefile blocked"           git -C "$REPO" restore vhagar/file.txt
+assert_blocked "git restore somefile blocked"           git -C "$REPO" restore my-project/file.txt
 # Stage a file so 'git restore --staged' has something to unstage
-echo "for staging" > "$REPO/vhagar/tostage.txt"
-"$REAL_GIT" -C "$REPO" add vhagar/tostage.txt
-assert_allowed "git restore --staged somefile allowed"  git -C "$REPO" restore --staged vhagar/tostage.txt
+echo "for staging" > "$REPO/my-project/tostage.txt"
+"$REAL_GIT" -C "$REPO" add my-project/tostage.txt
+assert_allowed "git restore --staged somefile allowed"  git -C "$REPO" restore --staged my-project/tostage.txt
 # Discard the unstaged file
-"$REAL_GIT" -C "$REPO" checkout -- vhagar/tostage.txt 2>/dev/null || true
-rm -f "$REPO/vhagar/tostage.txt"
+"$REAL_GIT" -C "$REPO" checkout -- my-project/tostage.txt 2>/dev/null || true
+rm -f "$REPO/my-project/tostage.txt"
 
 # ── scoped_paths ──────────────────────────────────────────────────────────────
 echo ""
 echo "=== scoped_paths ==="
 assert_blocked "git add . blocked"                   git -C "$REPO" add .
 assert_blocked "git add -A blocked"                  git -C "$REPO" add -A
-# Provide a modified vhagar file for the "allowed" add tests
-echo "modified" >> "$REPO/vhagar/file.txt"
-assert_allowed "git add -A vhagar/file.txt allowed"  git -C "$REPO" add -A vhagar/file.txt
+# Provide a modified my-project file for the "allowed" add tests
+echo "modified" >> "$REPO/my-project/file.txt"
+assert_allowed "git add -A my-project/file.txt allowed"  git -C "$REPO" add -A my-project/file.txt
 # Modify again (previous add staged it)
-echo "modified2" >> "$REPO/vhagar/file.txt"
-assert_allowed "git add vhagar/file.txt allowed"     git -C "$REPO" add vhagar/file.txt
+echo "modified2" >> "$REPO/my-project/file.txt"
+assert_allowed "git add my-project/file.txt allowed"     git -C "$REPO" add my-project/file.txt
 assert_blocked "git add other/file.txt blocked"      git -C "$REPO" add other/file.txt
 # Clean up staged changes so later tests have a clean state
-"$REAL_GIT" -C "$REPO" checkout HEAD -- vhagar/file.txt
+"$REAL_GIT" -C "$REPO" checkout HEAD -- my-project/file.txt
 
 # ── worktree_only_branches ────────────────────────────────────────────────────
 echo ""
 echo "=== worktree_only_branches ==="
 assert_blocked "git switch main blocked"          git -C "$REPO" switch main
 assert_blocked "git checkout main blocked"        git -C "$REPO" checkout main
-assert_allowed "git checkout -- clean file allowed" git -C "$REPO" checkout -- vhagar/file.txt
-# Make vhagar/file.txt dirty
-echo "dirty content" >> "$REPO/vhagar/file.txt"
-assert_blocked "git checkout -- dirty file blocked" git -C "$REPO" checkout -- vhagar/file.txt
+assert_allowed "git checkout -- clean file allowed" git -C "$REPO" checkout -- my-project/file.txt
+# Make my-project/file.txt dirty
+echo "dirty content" >> "$REPO/my-project/file.txt"
+assert_blocked "git checkout -- dirty file blocked" git -C "$REPO" checkout -- my-project/file.txt
 # Restore dirty file with real git
-"$REAL_GIT" -C "$REPO" checkout -- vhagar/file.txt
+"$REAL_GIT" -C "$REPO" checkout -- my-project/file.txt
 
 # ── protected_branches ────────────────────────────────────────────────────────
 echo ""
 echo "=== protected_branches ==="
-# Commit touching non-vhagar file → push should be blocked
+# Commit touching non-my-project file → push should be blocked
 echo "bad change" >> "$REPO/other/file.txt"
 "$REAL_GIT" -C "$REPO" add other/file.txt
-"$REAL_GIT" -C "$REPO" commit -m "touch non-vhagar"
-assert_blocked "push touching non-vhagar file blocked" git -C "$REPO" push origin main
+"$REAL_GIT" -C "$REPO" commit -m "touch non-my-project"
+assert_blocked "push touching non-my-project file blocked" git -C "$REPO" push origin main
 # Reset the bad commit
 "$REAL_GIT" -C "$REPO" reset --hard HEAD~1
 
-# Commit touching only vhagar/ file → push should be allowed
-echo "good change" >> "$REPO/vhagar/file.txt"
-"$REAL_GIT" -C "$REPO" add vhagar/file.txt
-"$REAL_GIT" -C "$REPO" commit -m "touch vhagar only"
-assert_allowed "push touching only vhagar/ file allowed" git -C "$REPO" push origin main
+# Commit touching only my-project/ file → push should be allowed
+echo "good change" >> "$REPO/my-project/file.txt"
+"$REAL_GIT" -C "$REPO" add my-project/file.txt
+"$REAL_GIT" -C "$REPO" commit -m "touch my-project only"
+assert_allowed "push touching only my-project/ file allowed" git -C "$REPO" push origin main
 
 # ── require_upstream_before_bare_push ──────────────────────────────────────────
 echo ""
 echo "=== require_upstream_before_bare_push ==="
 # Create a branch with no upstream tracking
 "$REAL_GIT" -C "$REPO" checkout -b no-upstream-branch
-echo "no upstream content" > "$REPO/vhagar/noup.txt"
-"$REAL_GIT" -C "$REPO" add vhagar/noup.txt
+echo "no upstream content" > "$REPO/my-project/noup.txt"
+"$REAL_GIT" -C "$REPO" add my-project/noup.txt
 "$REAL_GIT" -C "$REPO" commit -m "commit on no-upstream branch"
 assert_blocked "bare push without upstream blocked" git -C "$REPO" push
 assert_passes_through "explicit push remote+branch allowed (no upstream)" git -C "$REPO" push origin no-upstream-branch
@@ -264,7 +264,7 @@ echo "=== +refspec force push ==="
 echo "plus refspec change" >> "$REPO/other/file.txt"
 "$REAL_GIT" -C "$REPO" add other/file.txt
 "$REAL_GIT" -C "$REPO" commit -m "change for +refspec test"
-assert_blocked "push origin +main blocked (touches non-vhagar)" git -C "$REPO" push origin +main
+assert_blocked "push origin +main blocked (touches non-my-project)" git -C "$REPO" push origin +main
 "$REAL_GIT" -C "$REPO" reset --hard HEAD~1
 
 # ── subcommand with preceding flags ──────────────────────────────────────────
@@ -320,10 +320,10 @@ assert_blocked "git checkout -b newbranch blocked" git -C "$REPO" checkout -b ne
 assert_blocked "git add --all blocked" git -C "$REPO" add --all
 
 # restore -S (short form of --staged) allowed
-echo "for short staged" > "$REPO/vhagar/shortstage.txt"
-"$REAL_GIT" -C "$REPO" add vhagar/shortstage.txt
-assert_allowed "git restore -S allowed" git -C "$REPO" restore -S vhagar/shortstage.txt
-rm -f "$REPO/vhagar/shortstage.txt"
+echo "for short staged" > "$REPO/my-project/shortstage.txt"
+"$REAL_GIT" -C "$REPO" add my-project/shortstage.txt
+assert_allowed "git restore -S allowed" git -C "$REPO" restore -S my-project/shortstage.txt
+rm -f "$REPO/my-project/shortstage.txt"
 
 # global flag before blocked subcommand
 assert_blocked "git --no-pager push --force blocked" git --no-pager -C "$REPO" push --force
@@ -332,7 +332,7 @@ assert_blocked "git --no-pager push --force blocked" git --no-pager -C "$REPO" p
 echo "refspec change" >> "$REPO/other/file.txt"
 "$REAL_GIT" -C "$REPO" add other/file.txt
 "$REAL_GIT" -C "$REPO" commit -m "change for refspec test"
-assert_blocked "push origin main:main blocked (non-vhagar)" git -C "$REPO" push origin main:main
+assert_blocked "push origin main:main blocked (non-my-project)" git -C "$REPO" push origin main:main
 "$REAL_GIT" -C "$REPO" reset --hard HEAD~1
 
 # empty config {} — valid JSON, no rules, should passthrough

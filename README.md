@@ -110,16 +110,16 @@ Place `.git-safety.json` in the root of the repository you want to guard. All ke
     {
       "command": "add",
       "blocked_paths": ["."],
-      "allowed_prefixes": ["vhagar/"],
-      "message": "git add must be scoped to vhagar/. Use explicit paths."
+      "allowed_prefixes": ["my-project/"],
+      "message": "git add must be scoped to my-project/. Use explicit paths."
     }
   ],
 
   // Per-branch push protection: diff against remote SHA and check file paths
   "protected_branches": {
     "main": {
-      "allowed_path_prefixes": ["vhagar/"],
-      "message": "Direct pushes to main must only touch vhagar/."
+      "allowed_path_prefixes": ["my-project/"],
+      "message": "Direct pushes to main must only touch my-project/."
     }
   }
 }

@@ -40,15 +40,15 @@
     {
       "command": "add",
       "blocked_paths": ["."],
-      "allowed_prefixes": ["vhagar/"],
-      "message": "git add must be scoped to vhagar/. Use explicit paths."
+      "allowed_prefixes": ["my-project/"],
+      "message": "git add must be scoped to my-project/. Use explicit paths."
     }
   ],
 
   "protected_branches": {
     "main": {
-      "allowed_path_prefixes": ["vhagar/"],
-      "message": "Direct pushes to main must only touch vhagar/. Use a branch and PR for other changes."
+      "allowed_path_prefixes": ["my-project/"],
+      "message": "Direct pushes to main must only touch my-project/. Use a branch and PR for other changes."
     }
   }
 }
