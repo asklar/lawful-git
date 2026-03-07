@@ -347,6 +347,17 @@ assert_allowed "empty config {} passes through" git -C "$EMPTY_CFG_REPO" status
 # blocked path after -- separator (git add -- .)
 assert_blocked "git add -- . blocked" git -C "$REPO" add -- .
 
+# absolute path prefix in config is rejected
+ABS_PREFIX_REPO="$TMPDIR_ROOT/absprefixrepo"
+"$REAL_GIT" init "$ABS_PREFIX_REPO"
+echo "content" > "$ABS_PREFIX_REPO/file.txt"
+"$REAL_GIT" -C "$ABS_PREFIX_REPO" add .
+"$REAL_GIT" -C "$ABS_PREFIX_REPO" commit -m "initial"
+cat > "$ABS_PREFIX_REPO/.git-safety.json" <<'EOF'
+{ "scoped_paths": [{ "command": "add", "allowed_prefixes": ["/src/"], "message": "test" }] }
+EOF
+assert_blocked "absolute allowed_prefix rejected" git -C "$ABS_PREFIX_REPO" status
+
 # ── passthrough ───────────────────────────────────────────────────────────────
 echo ""
 echo "=== passthrough ==="

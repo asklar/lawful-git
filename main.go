@@ -173,7 +173,35 @@ func loadConfig() (*Config, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("invalid .git-safety.json: %w", err)
 	}
+	if err := validateConfig(&cfg); err != nil {
+		return nil, err
+	}
 	return &cfg, nil
+}
+
+// validateConfig checks for common misconfigurations that would silently
+// misbehave at runtime.
+func validateConfig(cfg *Config) error {
+	for _, rule := range cfg.ScopedPaths {
+		for _, p := range rule.AllowedPrefixes {
+			if strings.HasPrefix(p, "/") {
+				return fmt.Errorf("invalid .git-safety.json: allowed_prefixes entry %q starts with '/'; git paths are relative to the repo root", p)
+			}
+		}
+		for _, p := range rule.BlockedPaths {
+			if strings.HasPrefix(p, "/") {
+				return fmt.Errorf("invalid .git-safety.json: blocked_paths entry %q starts with '/'; git paths are relative to the repo root", p)
+			}
+		}
+	}
+	for branch, rule := range cfg.ProtectedBranches {
+		for _, p := range rule.AllowedPathPrefixes {
+			if strings.HasPrefix(p, "/") {
+				return fmt.Errorf("invalid .git-safety.json: protected_branches[%q].allowed_path_prefixes entry %q starts with '/'; git paths are relative to the repo root", branch, p)
+			}
+		}
+	}
+	return nil
 }
 
 // block prints a BLOCKED message to stderr and exits 1.
