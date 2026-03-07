@@ -27,24 +27,11 @@ Use `git --lawful-version` to check which version is installed.
 
 ### Linux / macOS
 
-Download the latest binary from [Releases](https://github.com/asklar/lawful-git/releases), then:
-
 ```sh
-# Example for Linux amd64:
-curl -Lo lawful-git https://github.com/asklar/lawful-git/releases/latest/download/lawful-git-linux-amd64
-chmod +x lawful-git
-sudo mkdir -p /usr/local/lib/lawful-git
-sudo mv lawful-git /usr/local/lib/lawful-git/
-sudo ln -s /usr/local/lib/lawful-git/lawful-git /usr/local/bin/git
+curl -fsSL https://raw.githubusercontent.com/asklar/lawful-git/main/install.sh | bash
 ```
 
-Or build from source (requires Go 1.21+):
-
-```sh
-git clone https://github.com/asklar/lawful-git
-cd lawful-git
-bash install.sh
-```
+This auto-detects your OS/architecture, downloads the latest release binary, installs it, and creates a `git` symlink ahead of the real git on PATH.
 
 #### Environment variable overrides
 
@@ -52,6 +39,13 @@ bash install.sh
 |---|---|---|
 | `LAWFUL_GIT_INSTALL_DIR` | `/usr/local/lib/lawful-git` | Directory for the binary |
 | `LAWFUL_GIT_SYMLINK` | `/usr/local/bin/git` | Symlink path that shadows real `git` |
+
+Example with custom paths:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/asklar/lawful-git/main/install.sh | \
+  LAWFUL_GIT_INSTALL_DIR=~/.local/lib/lawful-git LAWFUL_GIT_SYMLINK=~/.local/bin/git bash
+```
 
 #### Uninstall (Linux/macOS)
 
