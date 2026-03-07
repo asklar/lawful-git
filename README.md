@@ -1,6 +1,6 @@
 # lawful-git
 
-A data-driven git guardrail engine for AI agent sessions. `lawful-git` is a drop-in replacement for the `git` binary that enforces per-repo safety policies declared in a `.git-safety.json` file, then `exec`s the real `git` transparently.
+A data-driven git guardrail engine for AI agent sessions. `lawful-git` is a drop-in replacement for the `git` binary that enforces per-repo safety policies declared in a `.lawful-git.json` file, then `exec`s the real `git` transparently.
 
 **Why?** AI coding agents (Copilot, Cursor, Cline, etc.) can run `git` commands autonomously. Without guardrails, a misconfigured agent can force-push to main, delete branches, or `git clean` your work. `lawful-git` lets you declare what's allowed per-repo — the agent never knows it's being constrained, and your safety rules live in version control alongside the code.
 
@@ -10,7 +10,7 @@ A data-driven git guardrail engine for AI agent sessions. `lawful-git` is a drop
 
 When invoked as `git`, `lawful-git`:
 
-1. Loads global config (`~/.lawful-git.json`) and repo config (`.git-safety.json`), merging them
+1. Loads global config (`~/.lawful-git.json`) and repo config (`.lawful-git.json`), merging them
 2. If no config exists, passes through to the real git unchanged
 3. If a rule is violated:
    - **Hard block** → prints `❌ BLOCKED: <message>` and exits 1
@@ -68,7 +68,7 @@ lawful-git loads config from two locations and merges them:
 | Location | Purpose |
 |---|---|
 | `~/.lawful-git.json` (`%USERPROFILE%` on Windows) | **Global** (per-user) — applies to all repos |
-| `.git-safety.json` (repo root) | **Per-repo** — augments global config |
+| `.lawful-git.json` (repo root) | **Per-repo** — augments global config |
 
 Override the global config path with `LAWFUL_GIT_GLOBAL_CONFIG=/path/to/config.json`.
 
@@ -96,7 +96,7 @@ If only a global config exists (no repo config, or not in a repo), its rules sti
 }
 ```
 
-A per-repo `.git-safety.json` can then add repo-specific rules (e.g. scoped_paths, protected_branches) on top of these global defaults.
+A per-repo `.lawful-git.json` can then add repo-specific rules (e.g. scoped_paths, protected_branches) on top of these global defaults.
 
 ### Environment variables
 

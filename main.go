@@ -41,7 +41,7 @@ type ProtectedBranchConfig struct {
 	Message             string   `json:"message"`
 }
 
-// Config is the top-level .git-safety.json structure.
+// Config is the top-level .lawful-git.json structure.
 type Config struct {
 	Blocked                       []BlockedRule                    `json:"blocked"`
 	Require                       []RequireRule                    `json:"require"`
@@ -223,7 +223,7 @@ func mergeConfigs(global, repo *Config) *Config {
 	return &merged
 }
 
-// loadConfig reads global (~/.lawful-git.json) and repo (.git-safety.json)
+// loadConfig reads global (~/.lawful-git.json) and repo (.lawful-git.json)
 // configs, merges them, and validates the result.
 // Returns nil, nil when no config exists at all — intentional passthrough.
 func loadConfig() (*Config, error) {
@@ -241,8 +241,8 @@ func loadConfig() (*Config, error) {
 	var repoCfg *Config
 	root, err := runGitOutput("rev-parse", "--show-toplevel")
 	if err == nil {
-		configPath := filepath.Join(root, ".git-safety.json")
-		repoCfg, err = parseConfigFile(configPath, ".git-safety.json")
+		configPath := filepath.Join(root, ".lawful-git.json")
+		repoCfg, err = parseConfigFile(configPath, ".lawful-git.json")
 		if err != nil {
 			return nil, err
 		}
@@ -314,7 +314,7 @@ func stripJSONComments(s string) string {
 
 // cfgErr formats a config validation error with a consistent prefix.
 func cfgErr(format string, args ...interface{}) error {
-	return fmt.Errorf("invalid .git-safety.json: "+format, args...)
+	return fmt.Errorf("invalid .lawful-git.json: "+format, args...)
 }
 
 // validateConfig checks for misconfigurations that would silently

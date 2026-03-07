@@ -21,7 +21,7 @@ trap 'rm -rf "$TMPDIR_ROOT"' EXIT
 REPO="$TMPDIR_ROOT/testrepo"
 REMOTE="$TMPDIR_ROOT/remote.git"
 BINDIR="$TMPDIR_ROOT/bin"
-CLEAN_REPO="$TMPDIR_ROOT/cleanrepo"   # repo without .git-safety.json
+CLEAN_REPO="$TMPDIR_ROOT/cleanrepo"   # repo without .lawful-git.json
 
 mkdir -p "$REPO" "$BINDIR"
 
@@ -63,12 +63,12 @@ echo "my-project v3" >> "$REPO/my-project/file.txt"
 
 # Copy lawful-git binary and config into test repo
 cp "$PROJECT_DIR/lawful-git" "$BINDIR/lawful-git"
-cp "$PROJECT_DIR/examples/git-safety.json" "$REPO/.git-safety.json"
+cp "$PROJECT_DIR/examples/lawful-git.json" "$REPO/.lawful-git.json"
 
 # Create git symlink in BINDIR
 ln -s "$BINDIR/lawful-git" "$BINDIR/git"
 
-# Create clean repo (no .git-safety.json) for passthrough test
+# Create clean repo (no .lawful-git.json) for passthrough test
 "$REAL_GIT" init "$CLEAN_REPO"
 echo "clean" > "$CLEAN_REPO/readme.txt"
 "$REAL_GIT" -C "$CLEAN_REPO" add .
@@ -294,8 +294,8 @@ BAD_REPO="$TMPDIR_ROOT/badrepo"
 echo "content" > "$BAD_REPO/file.txt"
 "$REAL_GIT" -C "$BAD_REPO" add .
 "$REAL_GIT" -C "$BAD_REPO" commit -m "initial"
-echo "NOT VALID JSON{{{" > "$BAD_REPO/.git-safety.json"
-assert_blocked "malformed .git-safety.json causes exit" git -C "$BAD_REPO" status
+echo "NOT VALID JSON{{{" > "$BAD_REPO/.lawful-git.json"
+assert_blocked "malformed .lawful-git.json causes exit" git -C "$BAD_REPO" status
 
 # ── --no-verify on other commands ─────────────────────────────────────────────
 echo ""
@@ -320,7 +320,7 @@ echo "content" > "$CONSENT_REPO/file.txt"
 "$REAL_GIT" -C "$CONSENT_REPO" push -u origin main
 
 # Config with a consent rule and a consent_command that always approves
-cat > "$CONSENT_REPO/.git-safety.json" <<'EOF'
+cat > "$CONSENT_REPO/.lawful-git.json" <<'EOF'
 {
   "consent_command": "cat",
   "blocked": [
@@ -361,7 +361,7 @@ else
 fi
 
 # consent_command that denies (exits non-zero)
-cat > "$CONSENT_REPO/.git-safety.json" <<'EOF'
+cat > "$CONSENT_REPO/.lawful-git.json" <<'EOF'
 {
   "consent_command": "false",
   "blocked": [
@@ -390,7 +390,7 @@ else
 fi
 
 # Empty justification file should be rejected
-cat > "$CONSENT_REPO/.git-safety.json" <<'EOF'
+cat > "$CONSENT_REPO/.lawful-git.json" <<'EOF'
 {
   "consent_command": "cat",
   "blocked": [
@@ -458,7 +458,7 @@ if \$ok; then exit 0; else exit 1; fi
 SCRIPT
 chmod +x "$VALIDATE_SCRIPT"
 
-cat > "$CONSENT_REPO/.git-safety.json" <<EOF
+cat > "$CONSENT_REPO/.lawful-git.json" <<EOF
 {
   "consent_command": "$VALIDATE_SCRIPT",
   "blocked": [
@@ -477,7 +477,7 @@ else
 fi
 
 # Hard-blocked rules should still block even with consent_command configured
-cat > "$CONSENT_REPO/.git-safety.json" <<'EOF'
+cat > "$CONSENT_REPO/.lawful-git.json" <<'EOF'
 {
   "consent_command": "cat",
   "blocked": [
@@ -496,7 +496,7 @@ echo "x" > "$HARD_BEFORE_CONSENT_REPO/f.txt"
 "$REAL_GIT" -C "$HARD_BEFORE_CONSENT_REPO" commit -m "initial"
 "$REAL_GIT" -C "$HARD_BEFORE_CONSENT_REPO" remote add origin "$CONSENT_REMOTE"
 # Note: NOT pushing with -u, so no upstream is configured
-cat > "$HARD_BEFORE_CONSENT_REPO/.git-safety.json" <<'EOF'
+cat > "$HARD_BEFORE_CONSENT_REPO/.lawful-git.json" <<'EOF'
 {
   "consent_command": "cat",
   "require_upstream_before_bare_push": true,
@@ -524,7 +524,7 @@ BADACTION_REPO="$TMPDIR_ROOT/badactionrepo"
 echo "x" > "$BADACTION_REPO/f.txt"
 "$REAL_GIT" -C "$BADACTION_REPO" add .
 "$REAL_GIT" -C "$BADACTION_REPO" commit -m "initial"
-cat > "$BADACTION_REPO/.git-safety.json" <<'EOF'
+cat > "$BADACTION_REPO/.lawful-git.json" <<'EOF'
 { "blocked": [{ "command": "push", "flags": ["--force"], "action": "maybe", "message": "bad" }] }
 EOF
 assert_blocked "invalid action value rejected" git -C "$BADACTION_REPO" status
@@ -544,7 +544,7 @@ BAD_CONSENT_REPO="$TMPDIR_ROOT/badconsentrepo"
 echo "x" > "$BAD_CONSENT_REPO/f.txt"
 "$REAL_GIT" -C "$BAD_CONSENT_REPO" add .
 "$REAL_GIT" -C "$BAD_CONSENT_REPO" commit -m "initial"
-cat > "$BAD_CONSENT_REPO/.git-safety.json" <<'EOF'
+cat > "$BAD_CONSENT_REPO/.lawful-git.json" <<'EOF'
 {
   "consent_command": "/nonexistent/approval-tool",
   "blocked": [{ "command": "push", "flags": ["--force"], "action": "consent", "message": "bad" }]
@@ -602,7 +602,7 @@ EMPTY_CFG_REPO="$TMPDIR_ROOT/emptycfgrepo"
 echo "content" > "$EMPTY_CFG_REPO/file.txt"
 "$REAL_GIT" -C "$EMPTY_CFG_REPO" add .
 "$REAL_GIT" -C "$EMPTY_CFG_REPO" commit -m "initial"
-echo '{}' > "$EMPTY_CFG_REPO/.git-safety.json"
+echo '{}' > "$EMPTY_CFG_REPO/.lawful-git.json"
 assert_allowed "empty config {} passes through" git -C "$EMPTY_CFG_REPO" status
 
 # JSONC: line comments (//) are supported
@@ -611,7 +611,7 @@ JSONC_REPO="$TMPDIR_ROOT/jsoncrepo"
 echo "x" > "$JSONC_REPO/f.txt"
 "$REAL_GIT" -C "$JSONC_REPO" add .
 "$REAL_GIT" -C "$JSONC_REPO" commit -m "initial"
-cat > "$JSONC_REPO/.git-safety.json" << 'EOF'
+cat > "$JSONC_REPO/.lawful-git.json" << 'EOF'
 {
   // This is a line comment
   "blocked": [
@@ -624,7 +624,7 @@ assert_blocked "JSONC line comments work" git -C "$JSONC_REPO" clean -fd
 assert_allowed "JSONC config loads without error" git -C "$JSONC_REPO" status
 
 # JSONC: block comments (/* */) are supported
-cat > "$JSONC_REPO/.git-safety.json" << 'EOF'
+cat > "$JSONC_REPO/.lawful-git.json" << 'EOF'
 {
   /* Block comment explaining the config */
   "blocked": [
@@ -635,7 +635,7 @@ EOF
 assert_blocked "JSONC block comments work" git -C "$JSONC_REPO" clean -fd
 
 # JSONC: comments inside strings are preserved (not stripped)
-cat > "$JSONC_REPO/.git-safety.json" << 'EOF'
+cat > "$JSONC_REPO/.lawful-git.json" << 'EOF'
 {
   "blocked": [
     { "command": "clean", "message": "no clean // this is part of the message" }
@@ -660,7 +660,7 @@ ABS_PREFIX_REPO="$TMPDIR_ROOT/absprefixrepo"
 echo "content" > "$ABS_PREFIX_REPO/file.txt"
 "$REAL_GIT" -C "$ABS_PREFIX_REPO" add .
 "$REAL_GIT" -C "$ABS_PREFIX_REPO" commit -m "initial"
-cat > "$ABS_PREFIX_REPO/.git-safety.json" <<'EOF'
+cat > "$ABS_PREFIX_REPO/.lawful-git.json" <<'EOF'
 { "scoped_paths": [{ "command": "add", "allowed_prefixes": ["/src/"], "message": "test" }] }
 EOF
 assert_blocked "absolute allowed_prefix rejected" git -C "$ABS_PREFIX_REPO" status
@@ -671,7 +671,7 @@ TYPO_REPO="$TMPDIR_ROOT/typorepo"
 echo "content" > "$TYPO_REPO/file.txt"
 "$REAL_GIT" -C "$TYPO_REPO" add .
 "$REAL_GIT" -C "$TYPO_REPO" commit -m "initial"
-cat > "$TYPO_REPO/.git-safety.json" <<'EOF'
+cat > "$TYPO_REPO/.lawful-git.json" <<'EOF'
 { "worktree_only_branch": true }
 EOF
 assert_blocked "unknown key (typo) rejected" git -C "$TYPO_REPO" status
@@ -682,7 +682,7 @@ EMPTY_CMD_REPO="$TMPDIR_ROOT/emptycmdrepo"
 echo "x" > "$EMPTY_CMD_REPO/f.txt"
 "$REAL_GIT" -C "$EMPTY_CMD_REPO" add .
 "$REAL_GIT" -C "$EMPTY_CMD_REPO" commit -m "initial"
-cat > "$EMPTY_CMD_REPO/.git-safety.json" <<'EOF'
+cat > "$EMPTY_CMD_REPO/.lawful-git.json" <<'EOF'
 { "blocked": [{ "message": "no command" }] }
 EOF
 assert_blocked "empty command in blocked rule rejected" git -C "$EMPTY_CMD_REPO" status
@@ -693,7 +693,7 @@ EMPTY_FLAGS_REPO="$TMPDIR_ROOT/emptyflagsrepo"
 echo "x" > "$EMPTY_FLAGS_REPO/f.txt"
 "$REAL_GIT" -C "$EMPTY_FLAGS_REPO" add .
 "$REAL_GIT" -C "$EMPTY_FLAGS_REPO" commit -m "initial"
-cat > "$EMPTY_FLAGS_REPO/.git-safety.json" <<'EOF'
+cat > "$EMPTY_FLAGS_REPO/.lawful-git.json" <<'EOF'
 { "require": [{ "command": "push", "one_of_flags": [], "message": "bad" }] }
 EOF
 assert_blocked "empty one_of_flags rejected" git -C "$EMPTY_FLAGS_REPO" status
@@ -704,7 +704,7 @@ BUNDLE_REPO="$TMPDIR_ROOT/bundlerepo"
 echo "x" > "$BUNDLE_REPO/f.txt"
 "$REAL_GIT" -C "$BUNDLE_REPO" add .
 "$REAL_GIT" -C "$BUNDLE_REPO" commit -m "initial"
-cat > "$BUNDLE_REPO/.git-safety.json" <<'EOF'
+cat > "$BUNDLE_REPO/.lawful-git.json" <<'EOF'
 { "blocked": [{ "command": "commit", "flags": ["-a"], "message": "no commit -a" }] }
 EOF
 echo "y" > "$BUNDLE_REPO/f.txt"
@@ -716,7 +716,7 @@ NO_DASH_REPO="$TMPDIR_ROOT/nodashrepo"
 echo "x" > "$NO_DASH_REPO/f.txt"
 "$REAL_GIT" -C "$NO_DASH_REPO" add .
 "$REAL_GIT" -C "$NO_DASH_REPO" commit -m "initial"
-cat > "$NO_DASH_REPO/.git-safety.json" <<'EOF'
+cat > "$NO_DASH_REPO/.lawful-git.json" <<'EOF'
 { "blocked": [{ "command": "push", "flags": ["force"], "message": "bad" }] }
 EOF
 assert_blocked "flag without dash rejected" git -C "$NO_DASH_REPO" status
@@ -727,7 +727,7 @@ DASH_SUB_REPO="$TMPDIR_ROOT/dashsubrepo"
 echo "x" > "$DASH_SUB_REPO/f.txt"
 "$REAL_GIT" -C "$DASH_SUB_REPO" add .
 "$REAL_GIT" -C "$DASH_SUB_REPO" commit -m "initial"
-cat > "$DASH_SUB_REPO/.git-safety.json" <<'EOF'
+cat > "$DASH_SUB_REPO/.lawful-git.json" <<'EOF'
 { "blocked": [{ "command": "stash", "subcommand": "-v", "message": "bad" }] }
 EOF
 assert_blocked "subcommand starting with dash rejected" git -C "$DASH_SUB_REPO" status
@@ -738,7 +738,7 @@ DOTDOT_REPO="$TMPDIR_ROOT/dotdotrepo"
 echo "x" > "$DOTDOT_REPO/f.txt"
 "$REAL_GIT" -C "$DOTDOT_REPO" add .
 "$REAL_GIT" -C "$DOTDOT_REPO" commit -m "initial"
-cat > "$DOTDOT_REPO/.git-safety.json" <<'EOF'
+cat > "$DOTDOT_REPO/.lawful-git.json" <<'EOF'
 { "scoped_paths": [{ "command": "add", "allowed_prefixes": ["../escape/"], "message": "test" }] }
 EOF
 assert_blocked "path traversal in allowed_prefixes rejected" git -C "$DOTDOT_REPO" status
@@ -749,7 +749,7 @@ DEAD_REQ_REPO="$TMPDIR_ROOT/deadreqrepo"
 echo "x" > "$DEAD_REQ_REPO/f.txt"
 "$REAL_GIT" -C "$DEAD_REQ_REPO" add .
 "$REAL_GIT" -C "$DEAD_REQ_REPO" commit -m "initial"
-cat > "$DEAD_REQ_REPO/.git-safety.json" <<'EOF'
+cat > "$DEAD_REQ_REPO/.lawful-git.json" <<'EOF'
 {
   "blocked": [{ "command": "clean", "message": "blocked" }],
   "require": [{ "command": "clean", "one_of_flags": ["--dry-run"], "message": "require" }]
@@ -763,7 +763,7 @@ UNSAT_REPO="$TMPDIR_ROOT/unsatrepo"
 echo "x" > "$UNSAT_REPO/f.txt"
 "$REAL_GIT" -C "$UNSAT_REPO" add .
 "$REAL_GIT" -C "$UNSAT_REPO" commit -m "initial"
-cat > "$UNSAT_REPO/.git-safety.json" <<'EOF'
+cat > "$UNSAT_REPO/.lawful-git.json" <<'EOF'
 {
   "blocked": [
     { "command": "push", "flags": ["--force"], "message": "no force" },
@@ -784,7 +784,7 @@ GLOBAL_ONLY_REPO="$TMPDIR_ROOT/globalonlyrepo"
 echo "x" > "$GLOBAL_ONLY_REPO/f.txt"
 "$REAL_GIT" -C "$GLOBAL_ONLY_REPO" add .
 "$REAL_GIT" -C "$GLOBAL_ONLY_REPO" commit -m "initial"
-# No .git-safety.json in repo
+# No .lawful-git.json in repo
 GLOBAL_CFG="$TMPDIR_ROOT/global-lawful-git.json"
 cat > "$GLOBAL_CFG" <<'EOF'
 { "blocked": [{ "command": "clean", "message": "global blocks clean" }] }
@@ -798,7 +798,7 @@ MERGE_REPO="$TMPDIR_ROOT/mergerepo"
 echo "x" > "$MERGE_REPO/f.txt"
 "$REAL_GIT" -C "$MERGE_REPO" add .
 "$REAL_GIT" -C "$MERGE_REPO" commit -m "initial"
-cat > "$MERGE_REPO/.git-safety.json" <<'EOF'
+cat > "$MERGE_REPO/.lawful-git.json" <<'EOF'
 { "blocked": [{ "command": "rebase", "message": "repo blocks rebase" }] }
 EOF
 MERGE_GLOBAL="$TMPDIR_ROOT/merge-global.json"
@@ -812,7 +812,7 @@ LAWFUL_GIT_GLOBAL_CONFIG="$MERGE_GLOBAL" assert_blocked "merged config blocks re
 cat > "$MERGE_GLOBAL" <<'EOF'
 { "worktree_only_branches": true }
 EOF
-cat > "$MERGE_REPO/.git-safety.json" <<'EOF'
+cat > "$MERGE_REPO/.lawful-git.json" <<'EOF'
 {}
 EOF
 LAWFUL_GIT_GLOBAL_CONFIG="$MERGE_GLOBAL" assert_blocked "boolean OR: global worktree_only applies" git -C "$MERGE_REPO" switch main
@@ -835,7 +835,7 @@ cat > "$OVERRIDE_GLOBAL" <<'EOF'
   "blocked": [{ "command": "push", "flags": ["--force"], "action": "consent", "message": "needs consent" }]
 }
 EOF
-cat > "$CONSENT_OVERRIDE_REPO/.git-safety.json" <<'EOF'
+cat > "$CONSENT_OVERRIDE_REPO/.lawful-git.json" <<'EOF'
 { "consent_command": "cat" }
 EOF
 # First attempt: get consent file path
@@ -862,8 +862,8 @@ PB_MERGE_REMOTE="$TMPDIR_ROOT/pbmergeremote.git"
 "$REAL_GIT" -C "$PB_MERGE_REPO" remote add origin "$PB_MERGE_REMOTE"
 mkdir -p "$PB_MERGE_REPO/repo-only"
 echo "x" > "$PB_MERGE_REPO/repo-only/f.txt"
-# Commit the .git-safety.json in the initial push so it's not in the diff
-cat > "$PB_MERGE_REPO/.git-safety.json" <<'EOF'
+# Commit the .lawful-git.json in the initial push so it's not in the diff
+cat > "$PB_MERGE_REPO/.lawful-git.json" <<'EOF'
 { "protected_branches": { "main": { "allowed_path_prefixes": ["repo-only/"], "message": "repo pb" } } }
 EOF
 "$REAL_GIT" -C "$PB_MERGE_REPO" add .
@@ -900,7 +900,7 @@ echo "x" > "$CONSOLE_CONSENT_REPO/f.txt"
 "$REAL_GIT" -C "$CONSOLE_CONSENT_REPO" add .
 "$REAL_GIT" -C "$CONSOLE_CONSENT_REPO" commit -m "initial"
 "$REAL_GIT" -C "$CONSOLE_CONSENT_REPO" push -u origin main
-cat > "$CONSOLE_CONSENT_REPO/.git-safety.json" <<'EOF'
+cat > "$CONSOLE_CONSENT_REPO/.lawful-git.json" <<'EOF'
 {
   "consent_command": "cat",
   "blocked": [{ "command": "push", "flags": ["--force"], "action": "consent", "message": "consent" }]
@@ -919,7 +919,7 @@ fi
 # ── passthrough ───────────────────────────────────────────────────────────────
 echo ""
 echo "=== passthrough ==="
-assert_allowed "git status in repo without .git-safety.json" git -C "$CLEAN_REPO" status
+assert_allowed "git status in repo without .lawful-git.json" git -C "$CLEAN_REPO" status
 
 # ── Verify source repo was not modified ───────────────────────────────────────
 SOURCE_STATUS_AFTER=$("$REAL_GIT" -C "$PROJECT_DIR" status --porcelain 2>/dev/null || true)
