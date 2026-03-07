@@ -21,6 +21,7 @@ if (-not $realGitCmd) {
     Write-Error "git not found in PATH. Install Git for Windows first."
     exit 1
 }
+$RealGitDir = Split-Path $realGitCmd.Source
 Write-Host "Real git: $($realGitCmd.Source)"
 
 if (Test-Path $Target) {
@@ -38,12 +39,48 @@ if (-not (Test-Path $InstallDir)) {
 }
 Invoke-WebRequest -Uri $Url -OutFile $Target
 
-# Add to PATH
-$currentPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
-if ($currentPath -notlike "*$InstallDir*") {
-    [Environment]::SetEnvironmentVariable('PATH', "$InstallDir;$currentPath", 'User')
-    $env:PATH = "$InstallDir;$env:PATH"
-    Write-Host "Added $InstallDir to user PATH."
+# Determine if real git is in system PATH (common case: C:\Program Files\Git\cmd)
+$SystemPath = [Environment]::GetEnvironmentVariable('PATH', 'Machine')
+$GitInSystemPath = $SystemPath -like "*$RealGitDir*"
+
+if ($GitInSystemPath) {
+    Write-Host ""
+    Write-Host "Git is in the system PATH. lawful-git needs to be added to the system PATH"
+    Write-Host "(ahead of git) to intercept git calls. This requires administrator privileges."
+    Write-Host ""
+
+    # Check if already elevated
+    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+    if ($isAdmin) {
+        $SystemPath = [Environment]::GetEnvironmentVariable('PATH', 'Machine')
+        if ($SystemPath -notlike "*$InstallDir*") {
+            [Environment]::SetEnvironmentVariable('PATH', "$InstallDir;$SystemPath", 'Machine')
+            $env:PATH = "$InstallDir;$env:PATH"
+            Write-Host "Added $InstallDir to system PATH (ahead of git)."
+        }
+    } else {
+        Write-Host "Requesting elevation to modify system PATH..."
+        $script = @"
+`$sp = [Environment]::GetEnvironmentVariable('PATH', 'Machine')
+if (`$sp -notlike '*$InstallDir*') {
+    [Environment]::SetEnvironmentVariable('PATH', '$InstallDir;' + `$sp, 'Machine')
+    Write-Host 'Done.'
+} else {
+    Write-Host 'Already in system PATH.'
+}
+"@
+        Start-Process powershell -Verb RunAs -ArgumentList "-NoProfile", "-Command", $script -Wait
+        $env:PATH = "$InstallDir;$env:PATH"
+    }
+} else {
+    # Git is only in user PATH, so user PATH works
+    $UserPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
+    if ($UserPath -notlike "*$InstallDir*") {
+        [Environment]::SetEnvironmentVariable('PATH', "$InstallDir;$UserPath", 'User')
+        $env:PATH = "$InstallDir;$env:PATH"
+        Write-Host "Added $InstallDir to user PATH."
+    }
 }
 
 Write-Host ""
@@ -51,4 +88,4 @@ Write-Host "lawful-git installed successfully."
 Write-Host ""
 Write-Host "To uninstall:"
 Write-Host "  Remove-Item '$Target'"
-Write-Host "  # Remove '$InstallDir' from your user PATH in System Properties"
+Write-Host "  # Remove '$InstallDir' from your PATH (system or user) in System Properties"
