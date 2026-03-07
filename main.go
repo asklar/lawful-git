@@ -147,10 +147,12 @@ func parseGlobalOpts(args []string) (cmdIdx int, dirChange string) {
 }
 
 // loadConfig reads and parses .git-safety.json from the repo root.
-// Returns nil, nil when not in a git repo or when no config file exists.
+// Returns nil, nil when not in a git repo or when no config file exists —
+// intentional passthrough: lawful-git is transparent outside configured repos.
 func loadConfig() (*Config, error) {
 	root, err := runGitOutput("rev-parse", "--show-toplevel")
 	if err != nil {
+		// Not inside a git repo; pass through to real git unchanged.
 		return nil, nil
 	}
 
@@ -317,8 +319,10 @@ func applyRules(cfg *Config, args []string) {
 			if !hasSeparator {
 				block("git checkout without -- is not allowed in worktree-only mode. Use git checkout -- <file> for file restores.")
 			}
-			// check_dirty_on_checkout: block if any file after -- has uncommitted changes
+			// check_dirty_on_checkout: block if any file after -- has uncommitted changes.
+			// Batch all targets into one git diff call for efficiency.
 			if cfg.CheckDirtyOnCheckout {
+				var targets []string
 				afterSep := false
 				for _, a := range rest {
 					if a == "--" {
@@ -326,10 +330,14 @@ func applyRules(cfg *Config, args []string) {
 						continue
 					}
 					if afterSep && !strings.HasPrefix(a, "-") {
-						diff, err := runGitOutput("diff", "HEAD", "--", a)
-						if err == nil && diff != "" {
-							block(fmt.Sprintf("File '%s' has uncommitted changes. Checkout would discard them.", a))
-						}
+						targets = append(targets, a)
+					}
+				}
+				if len(targets) > 0 {
+					diffArgs := append([]string{"diff", "HEAD", "--name-only", "--"}, targets...)
+					dirty, err := runGitOutput(diffArgs...)
+					if err == nil && dirty != "" {
+						block(fmt.Sprintf("One or more files have uncommitted changes. Checkout would discard them: %s", dirty))
 					}
 				}
 			}
