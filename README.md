@@ -87,13 +87,20 @@ Place `.git-safety.json` in the root of the repository you want to guard. All ke
   // Block bare `git push` when no upstream tracking branch is configured
   "require_upstream_before_bare_push": true,
 
+  // External program for consent approval (optional, see Consent section below)
+  "consent_command": "/path/to/my-approval-tool",
+
   // Commands/flags/subcommands to block outright
   "blocked": [
     { "command": "clean",   "message": "git clean deletes untracked files." },
-    { "command": "push",    "flag": "--force",      "message": "Force push requires approval." },
-    { "command": "push",    "flag": "-f",           "message": "Force push requires approval." },
+    { "command": "push",    "flag": "--force",      "message": "Force push is blocked." },
+    { "command": "push",    "flag": "-f",           "message": "Force push is blocked." },
     { "command": "stash",   "subcommand": "drop",   "message": "git stash drop can lose stashed work." },
-    { "command": "commit",  "flag_in_bundle": "a",  "message": "git commit -a stages all changes implicitly." }
+    { "command": "commit",  "flag_in_bundle": "a",  "message": "git commit -a stages all changes implicitly." },
+
+    // Consent rules: soft-block that allows override with justification
+    { "command": "push",  "flag": "--force-with-lease", "action": "consent",
+      "message": "Force-with-lease push requires consent." }
   ],
 
   // Commands that must include at least one of the listed flags
@@ -137,6 +144,70 @@ Blocks a git invocation when **all specified fields** match:
 | `subcommand` | `os.Args[2]` | `"drop"` |
 | `flag` | exact flag anywhere in args | `"--force"` |
 | `flag_in_bundle` | single char inside short flag bundles | `"a"` catches `-a`, `-am`, `-cam` |
+| `action` | what happens on match (default: `"block"`) | `"block"` or `"consent"` |
+
+When `action` is `"block"` (the default), the command is rejected immediately.
+When `action` is `"consent"`, the command enters the consent flow (see below).
+
+#### Consent
+
+Consent rules are soft blocks: instead of rejecting outright, they allow the caller to provide a justification and get interactive approval. This is designed for AI agent workflows where you want a human in the loop for risky-but-sometimes-necessary operations.
+
+**How it works:**
+
+1. **First attempt** — lawful-git prints instructions and exits 1:
+   ```
+   ⚠️  CONSENT REQUIRED: Force push requires consent.
+   To proceed, write your justification to:
+     /tmp/lawful-consent-a1b2c3d4e5f6
+   Then retry the command.
+   ```
+2. **The caller writes a justification** to the file path shown.
+3. **Retry** — lawful-git reads the justification, shows an approval dialog, and proceeds only if approved.
+
+The consent file is deterministic (based on a hash of the repo path + command args), so retrying the exact same command finds the file. The file is deleted after reading regardless of the outcome (one-time use).
+
+**Approval dialog:**
+
+The dialog shows the repo path, current branch, exact command, rule message, and the caller's justification. The platform-specific behavior:
+
+| Platform | Dialog |
+|---|---|
+| Windows | Win32 MessageBox (via PowerShell `System.Windows.Forms`) |
+| WSL | Windows MessageBox (via `powershell.exe`) |
+| macOS | Native dialog (via `osascript`) |
+| Linux | Zenity (if installed) |
+| Fallback | Terminal `y/N` prompt (reads from `/dev/tty`) |
+
+**Custom consent command:**
+
+To override the built-in dialog, set `consent_command` in your config:
+
+```json
+{
+  "consent_command": "/path/to/my-approval-tool",
+  "blocked": [
+    { "command": "push", "flag": "--force", "action": "consent", "message": "Force push requires consent." }
+  ]
+}
+```
+
+The consent command receives a JSON payload on stdin:
+
+```json
+{
+  "message": "Force push requires consent.",
+  "justification": "Rebased to squash fixup commits before merge",
+  "args": ["push", "--force", "origin", "main"],
+  "repo": "/home/user/my-repo",
+  "branch": "feature/cleanup"
+}
+```
+
+- **Exit 0** = approved (lawful-git proceeds to exec real git)
+- **Non-zero exit** = denied (lawful-git blocks the command)
+
+This lets you integrate with any approval system — Slack bots, ticketing APIs, custom UIs, etc.
 
 #### `require`
 
