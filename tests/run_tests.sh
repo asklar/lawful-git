@@ -306,6 +306,74 @@ assert_blocked "git cherry-pick --no-verify blocked" git -C "$REPO" cherry-pick 
 assert_blocked "git merge --no-verify blocked"       git -C "$REPO" merge --no-verify somebranch
 assert_blocked "git am --no-verify blocked"          git -C "$REPO" am --no-verify
 
+# ── consent flow ──────────────────────────────────────────────────────────────
+echo ""
+echo "=== consent flow ==="
+CONSENT_REPO="$TMPDIR_ROOT/consentrepo"
+CONSENT_REMOTE="$TMPDIR_ROOT/consentremote.git"
+"$REAL_GIT" init --bare "$CONSENT_REMOTE"
+"$REAL_GIT" init "$CONSENT_REPO"
+"$REAL_GIT" -C "$CONSENT_REPO" remote add origin "$CONSENT_REMOTE"
+echo "content" > "$CONSENT_REPO/file.txt"
+"$REAL_GIT" -C "$CONSENT_REPO" add .
+"$REAL_GIT" -C "$CONSENT_REPO" commit -m "initial"
+"$REAL_GIT" -C "$CONSENT_REPO" push -u origin main
+
+# Config with a consent rule and a consent_command that always approves
+cat > "$CONSENT_REPO/.git-safety.json" <<'EOF'
+{
+  "consent_command": "cat",
+  "blocked": [
+    { "command": "push", "flag": "--force", "action": "consent", "message": "Force push requires consent." },
+    { "command": "clean", "message": "git clean is blocked." }
+  ]
+}
+EOF
+
+# First attempt without justification file → should exit non-zero with instructions
+output=$(git -C "$CONSENT_REPO" push --force 2>&1) || true
+if echo "$output" | grep -qF "CONSENT REQUIRED"; then
+    echo "✅ PASS: consent rule prints instructions on first attempt"
+    PASS=$((PASS + 1))
+else
+    echo "❌ FAIL: consent rule did not print instructions (got: $output)"
+    FAIL=$((FAIL + 1))
+fi
+
+# Extract the consent file path from the output
+consent_file=$(echo "$output" | grep -A1 "write your justification to:" | tail -1 | sed 's/^[[:space:]]*//' | tr -d '[:space:]')
+if [ -n "$consent_file" ] && echo "$consent_file" | grep -q "^/"; then
+    # Write justification and retry — consent_command is "cat" which always exits 0
+    echo "Rebased to squash fixup commits" > "$consent_file"
+    assert_passes_through "consent granted with justification file" git -C "$CONSENT_REPO" push --force
+    # Verify consent file was cleaned up
+    if [ ! -f "$consent_file" ]; then
+        echo "✅ PASS: consent file cleaned up after use"
+        PASS=$((PASS + 1))
+    else
+        echo "❌ FAIL: consent file was not cleaned up"
+        FAIL=$((FAIL + 1))
+        rm -f "$consent_file"
+    fi
+else
+    echo "❌ FAIL: could not extract consent file path from output"
+    FAIL=$((FAIL + 1))
+fi
+
+# Hard-blocked rules should still block even with consent_command configured
+assert_blocked "hard block still works with consent_command" git -C "$CONSENT_REPO" clean -fd
+
+# Invalid action value in config
+BADACTION_REPO="$TMPDIR_ROOT/badactionrepo"
+"$REAL_GIT" init "$BADACTION_REPO"
+echo "x" > "$BADACTION_REPO/f.txt"
+"$REAL_GIT" -C "$BADACTION_REPO" add .
+"$REAL_GIT" -C "$BADACTION_REPO" commit -m "initial"
+cat > "$BADACTION_REPO/.git-safety.json" <<'EOF'
+{ "blocked": [{ "command": "push", "flag": "--force", "action": "maybe", "message": "bad" }] }
+EOF
+assert_blocked "invalid action value rejected" git -C "$BADACTION_REPO" status
+
 # ── additional edge cases ─────────────────────────────────────────────────────
 echo ""
 echo "=== additional edge cases ==="

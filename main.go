@@ -18,6 +18,7 @@ type BlockedRule struct {
 	Flag         string `json:"flag"`
 	FlagInBundle string `json:"flag_in_bundle"`
 	Message      string `json:"message"`
+	Action       string `json:"action"` // "block" (default) or "consent"
 }
 
 // RequireRule requires at least one of the listed flags to be present.
@@ -50,6 +51,7 @@ type Config struct {
 	WorktreeOnlyBranches          bool                             `json:"worktree_only_branches"`
 	RequireUpstreamBeforeBarePush bool                             `json:"require_upstream_before_bare_push"`
 	CheckDirtyOnCheckout          bool                             `json:"check_dirty_on_checkout"`
+	ConsentCommand                string                           `json:"consent_command"`
 }
 
 var (
@@ -61,6 +63,8 @@ var (
 	// gitContext holds global git options (e.g. ["-C", "/path"]) prepended to
 	// every subprocess call so they operate on the correct repository.
 	gitContext []string
+	// repoRoot is the resolved repo root path, set during loadConfig.
+	repoRoot string
 )
 
 // findRealGit locates the real git binary by walking PATH, skipping the current executable.
@@ -179,6 +183,7 @@ func loadConfig() (*Config, error) {
 	if err := validateConfig(&cfg); err != nil {
 		return nil, err
 	}
+	repoRoot = root
 	return &cfg, nil
 }
 
@@ -211,6 +216,9 @@ func validateConfig(cfg *Config) error {
 		}
 		if rule.Subcommand != "" && strings.HasPrefix(rule.Subcommand, "-") {
 			return cfgErr("blocked[%d]: subcommand %q must not start with '-'", i, rule.Subcommand)
+		}
+		if rule.Action != "" && rule.Action != "block" && rule.Action != "consent" {
+			return cfgErr("blocked[%d]: action must be \"block\" or \"consent\", got %q", i, rule.Action)
 		}
 		if rule.Flag != "" {
 			blockedSet[cmdFlag{rule.Command, rule.Flag}] = true
@@ -300,6 +308,167 @@ func block(msg string) {
 	os.Exit(1)
 }
 
+// consentFilePath returns a deterministic temp file path for a consent request.
+// The filename is derived from the repo root and the command args so that
+// different operations in the same repo don't collide, but retrying the
+// same command finds the same file.
+func consentFilePath(args []string) string {
+	key := repoRoot + "\x00" + strings.Join(args, "\x00")
+	h := uint64(0)
+	for _, c := range key {
+		h = h*31 + uint64(c)
+	}
+	return filepath.Join(os.TempDir(), fmt.Sprintf("lawful-consent-%016x", h))
+}
+
+// requestConsent handles a consent-required rule. On first attempt (no justification
+// file), it prints instructions and exits. On retry (file exists), it reads the
+// justification and prompts the user via consent_command or a platform-native dialog.
+func requestConsent(cfg *Config, msg string, args []string) {
+	consentFile := consentFilePath(args)
+	justification, err := os.ReadFile(consentFile)
+	if err != nil {
+		// First attempt: no justification file — instruct the caller.
+		fmt.Fprintf(os.Stderr, "⚠️  CONSENT REQUIRED: %s\n", msg)
+		fmt.Fprintf(os.Stderr, "To proceed, write your justification to:\n  %s\nThen retry the command.\n", consentFile)
+		os.Exit(1)
+	}
+
+	// Justification file exists — prompt for consent.
+	justText := strings.TrimSpace(string(justification))
+	if justText == "" {
+		fmt.Fprintf(os.Stderr, "❌ BLOCKED: Justification file is empty: %s\n", consentFile)
+		os.Exit(1)
+	}
+
+	// Always remove the consent file after reading (one-time use).
+	defer os.Remove(consentFile)
+
+	approved := false
+	if cfg.ConsentCommand != "" {
+		approved = runConsentCommand(cfg.ConsentCommand, msg, justText, args)
+	} else {
+		approved = showConsentDialog(msg, justText, args)
+	}
+
+	if !approved {
+		block(msg)
+	}
+	// Consent granted — return to caller, which will exec real git.
+}
+
+// runConsentCommand invokes an external consent command.
+// It sends context as JSON on stdin. Exit 0 = approved.
+func runConsentCommand(command, msg, justification string, args []string) bool {
+	branch, _ := runGitOutput("rev-parse", "--abbrev-ref", "HEAD")
+
+	payload := struct {
+		Message       string   `json:"message"`
+		Justification string   `json:"justification"`
+		Args          []string `json:"args"`
+		Repo          string   `json:"repo"`
+		Branch        string   `json:"branch"`
+	}{msg, justification, args, repoRoot, branch}
+
+	data, _ := json.Marshal(payload)
+	cmd := exec.Command(command)
+	cmd.Stdin = strings.NewReader(string(data))
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run() == nil
+}
+
+// showConsentDialog shows a platform-native dialog asking the user to approve.
+// Falls back to a terminal prompt if no GUI is available.
+func showConsentDialog(msg, justification string, args []string) bool {
+	branch, _ := runGitOutput("rev-parse", "--abbrev-ref", "HEAD")
+	if branch == "" {
+		branch = "(unknown)"
+	}
+
+	prompt := fmt.Sprintf(
+		"Repo:   %s\nBranch: %s\nAction: git %s\n\nRule: %s\n\nJustification from agent:\n\"%s\"\n\nAllow this operation?",
+		repoRoot, branch, strings.Join(args, " "), msg, justification)
+
+	switch runtime.GOOS {
+	case "windows":
+		return showDialogWindows(prompt)
+	case "darwin":
+		return showDialogMacOS(prompt)
+	default:
+		return showDialogLinux(prompt)
+	}
+}
+
+// showDialogWindows calls Win32 MessageBox via PowerShell's Windows Forms.
+// Falls back to terminal prompt if PowerShell is unavailable.
+func showDialogWindows(prompt string) bool {
+	script := fmt.Sprintf(
+		`Add-Type -AssemblyName System.Windows.Forms; `+
+			`$result = [System.Windows.Forms.MessageBox]::Show('%s', 'lawful-git', 'YesNo', 'Warning'); `+
+			`if ($result -eq 'Yes') { exit 0 } else { exit 1 }`,
+		strings.ReplaceAll(strings.ReplaceAll(prompt, "'", "''"), "\n", "`n"))
+	cmd := exec.Command("powershell", "-NoProfile", "-Command", script)
+	err := cmd.Run()
+	if err == nil {
+		return true // user clicked Yes
+	}
+	if cmd.ProcessState != nil && cmd.ProcessState.ExitCode() == 1 {
+		return false // user clicked No
+	}
+	// PowerShell failed to run entirely — fall back to terminal.
+	return showDialogTerminal(prompt)
+}
+
+// showDialogMacOS uses osascript to show a native dialog.
+func showDialogMacOS(prompt string) bool {
+	escaped := strings.ReplaceAll(prompt, `"`, `\"`)
+	script := fmt.Sprintf(`display dialog "%s" buttons {"Deny", "Allow"} default button "Deny" with icon caution with title "lawful-git"`, escaped)
+	cmd := exec.Command("osascript", "-e", script)
+	out, err := cmd.Output()
+	if err != nil {
+		return showDialogTerminal(prompt)
+	}
+	return strings.Contains(string(out), "Allow")
+}
+
+// showDialogLinux tries zenity, then falls back to terminal.
+func showDialogLinux(prompt string) bool {
+	if _, err := exec.LookPath("zenity"); err == nil {
+		cmd := exec.Command("zenity", "--question", "--title=lawful-git",
+			"--text="+prompt, "--ok-label=Allow", "--cancel-label=Deny",
+			"--icon-name=dialog-warning", "--width=400")
+		if cmd.Run() == nil {
+			return true
+		}
+		return false
+	}
+	return showDialogTerminal(prompt)
+}
+
+// showDialogTerminal prompts on the terminal as a last resort.
+func showDialogTerminal(prompt string) bool {
+	// Open /dev/tty (or CON on Windows) to read directly from the terminal,
+	// even if stdin is piped.
+	ttyPath := "/dev/tty"
+	if runtime.GOOS == "windows" {
+		ttyPath = "CON"
+	}
+	tty, err := os.Open(ttyPath)
+	if err != nil {
+		// No terminal available — cannot get consent.
+		fmt.Fprintf(os.Stderr, "❌ BLOCKED: No terminal available to prompt for consent.\n")
+		return false
+	}
+	defer tty.Close()
+
+	fmt.Fprintf(os.Stderr, "\n%s\n\nAllow? [y/N] ", prompt)
+	buf := make([]byte, 8)
+	n, _ := tty.Read(buf)
+	answer := strings.TrimSpace(strings.ToLower(string(buf[:n])))
+	return answer == "y" || answer == "yes"
+}
+
 // hasFlag reports whether the exact flag string appears in args.
 func hasFlag(args []string, flag string) bool {
 	for _, a := range args {
@@ -385,7 +554,11 @@ func applyRules(cfg *Config, args []string) {
 				continue
 			}
 		}
-		block(rule.Message)
+		if rule.Action == "consent" {
+			requestConsent(cfg, rule.Message, args)
+		} else {
+			block(rule.Message)
+		}
 	}
 
 	// --- require rules ---
