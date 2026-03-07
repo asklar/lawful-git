@@ -67,7 +67,7 @@ lawful-git loads config from two locations and merges them:
 
 | Location | Purpose |
 |---|---|
-| `~/.lawful-git.json` | **Global** (per-user) — applies to all repos |
+| `~/.lawful-git.json` (`%USERPROFILE%` on Windows) | **Global** (per-user) — applies to all repos |
 | `.git-safety.json` (repo root) | **Per-repo** — augments global config |
 
 Override the global config path with `LAWFUL_GIT_GLOBAL_CONFIG=/path/to/config.json`.
