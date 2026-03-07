@@ -25,7 +25,20 @@ Use `git --lawful-version` to check which version is installed.
 
 ## Installation
 
-### Linux / macOS (one-liner)
+### Linux / macOS
+
+Download the latest binary from [Releases](https://github.com/asklar/lawful-git/releases), then:
+
+```sh
+# Example for Linux amd64:
+curl -Lo lawful-git https://github.com/asklar/lawful-git/releases/latest/download/lawful-git-linux-amd64
+chmod +x lawful-git
+sudo mkdir -p /usr/local/lib/lawful-git
+sudo mv lawful-git /usr/local/lib/lawful-git/
+sudo ln -s /usr/local/lib/lawful-git/lawful-git /usr/local/bin/git
+```
+
+Or build from source (requires Go 1.21+):
 
 ```sh
 git clone https://github.com/asklar/lawful-git
@@ -40,14 +53,6 @@ bash install.sh
 | `LAWFUL_GIT_INSTALL_DIR` | `/usr/local/lib/lawful-git` | Directory for the binary |
 | `LAWFUL_GIT_SYMLINK` | `/usr/local/bin/git` | Symlink path that shadows real `git` |
 
-Example:
-
-```sh
-LAWFUL_GIT_INSTALL_DIR=~/.local/lib/lawful-git \
-LAWFUL_GIT_SYMLINK=~/.local/bin/git \
-bash install.sh
-```
-
 #### Uninstall (Linux/macOS)
 
 ```sh
@@ -59,13 +64,27 @@ rm -rf /usr/local/lib/lawful-git
 
 ### Windows (PowerShell)
 
+Download the latest `.exe` from [Releases](https://github.com/asklar/lawful-git/releases), then:
+
+```powershell
+# Place it ahead of real git on PATH
+$dir = "$env:LOCALAPPDATA\lawful-git"
+New-Item -ItemType Directory -Path $dir -Force
+Move-Item lawful-git-windows-amd64.exe "$dir\git.exe"
+# Prepend to user PATH (persists across restarts)
+$path = [Environment]::GetEnvironmentVariable('PATH', 'User')
+if ($path -notlike "*$dir*") { [Environment]::SetEnvironmentVariable('PATH', "$dir;$path", 'User') }
+```
+
+Or build from source (requires Go 1.21+):
+
 ```powershell
 git clone https://github.com/asklar/lawful-git
 cd lawful-git
 .\install.ps1
 ```
 
-Installs to `$env:LOCALAPPDATA\lawful-git\git.exe` and prepends that directory to the user `PATH` via the registry (ahead of the real git).
+Installs to `$env:LOCALAPPDATA\lawful-git\git.exe` and prepends that directory to the user `PATH` (ahead of the real git).
 
 #### Uninstall (Windows)
 
