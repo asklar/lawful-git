@@ -2,6 +2,28 @@
 
 This integrates lawful-git consent prompts with OpenClaw + Telegram inline buttons.
 
+## Prereq: enable Telegram inline buttons in OpenClaw
+
+In your OpenClaw config (JSON/JSON5), enable inline buttons:
+
+```jsonc
+{
+  "channels": {
+    "telegram": {
+      "capabilities": {
+        "inlineButtons": "dm" // safest starting point
+      }
+    }
+  }
+}
+```
+
+Then restart the gateway:
+
+```sh
+openclaw gateway restart
+```
+
 ## How it works (lawful-git)
 - lawful-git detects a consent rule
 - it requires the caller to write a justification file, then retry the exact command
