@@ -413,6 +413,59 @@ cat > "$NO_DASH_REPO/.git-safety.json" <<'EOF'
 EOF
 assert_blocked "flag without dash rejected" git -C "$NO_DASH_REPO" status
 
+# subcommand starting with dash
+DASH_SUB_REPO="$TMPDIR_ROOT/dashsubrepo"
+"$REAL_GIT" init "$DASH_SUB_REPO"
+echo "x" > "$DASH_SUB_REPO/f.txt"
+"$REAL_GIT" -C "$DASH_SUB_REPO" add .
+"$REAL_GIT" -C "$DASH_SUB_REPO" commit -m "initial"
+cat > "$DASH_SUB_REPO/.git-safety.json" <<'EOF'
+{ "blocked": [{ "command": "stash", "subcommand": "-v", "message": "bad" }] }
+EOF
+assert_blocked "subcommand starting with dash rejected" git -C "$DASH_SUB_REPO" status
+
+# path traversal in allowed_prefixes
+DOTDOT_REPO="$TMPDIR_ROOT/dotdotrepo"
+"$REAL_GIT" init "$DOTDOT_REPO"
+echo "x" > "$DOTDOT_REPO/f.txt"
+"$REAL_GIT" -C "$DOTDOT_REPO" add .
+"$REAL_GIT" -C "$DOTDOT_REPO" commit -m "initial"
+cat > "$DOTDOT_REPO/.git-safety.json" <<'EOF'
+{ "scoped_paths": [{ "command": "add", "allowed_prefixes": ["../escape/"], "message": "test" }] }
+EOF
+assert_blocked "path traversal in allowed_prefixes rejected" git -C "$DOTDOT_REPO" status
+
+# require where command is blocked outright (dead code)
+DEAD_REQ_REPO="$TMPDIR_ROOT/deadreqrepo"
+"$REAL_GIT" init "$DEAD_REQ_REPO"
+echo "x" > "$DEAD_REQ_REPO/f.txt"
+"$REAL_GIT" -C "$DEAD_REQ_REPO" add .
+"$REAL_GIT" -C "$DEAD_REQ_REPO" commit -m "initial"
+cat > "$DEAD_REQ_REPO/.git-safety.json" <<'EOF'
+{
+  "blocked": [{ "command": "clean", "message": "blocked" }],
+  "require": [{ "command": "clean", "one_of_flags": ["--dry-run"], "message": "require" }]
+}
+EOF
+assert_blocked "require on bare-blocked command rejected" git -C "$DEAD_REQ_REPO" status
+
+# require where all one_of_flags are also blocked (unsatisfiable)
+UNSAT_REPO="$TMPDIR_ROOT/unsatrepo"
+"$REAL_GIT" init "$UNSAT_REPO"
+echo "x" > "$UNSAT_REPO/f.txt"
+"$REAL_GIT" -C "$UNSAT_REPO" add .
+"$REAL_GIT" -C "$UNSAT_REPO" commit -m "initial"
+cat > "$UNSAT_REPO/.git-safety.json" <<'EOF'
+{
+  "blocked": [
+    { "command": "push", "flag": "--force", "message": "no force" },
+    { "command": "push", "flag": "-f", "message": "no force" }
+  ],
+  "require": [{ "command": "push", "one_of_flags": ["--force", "-f"], "message": "must force" }]
+}
+EOF
+assert_blocked "unsatisfiable require (all flags blocked) rejected" git -C "$UNSAT_REPO" status
+
 # ── passthrough ───────────────────────────────────────────────────────────────
 echo ""
 echo "=== passthrough ==="

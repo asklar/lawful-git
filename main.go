@@ -190,6 +190,12 @@ func cfgErr(format string, args ...interface{}) error {
 // validateConfig checks for misconfigurations that would silently
 // misbehave at runtime.
 func validateConfig(cfg *Config) error {
+	// Collect blocked command+flag pairs for cross-rule checks.
+	type cmdFlag struct{ cmd, flag string }
+	blockedSet := make(map[cmdFlag]bool)
+	// Collect commands that are blocked outright (no flag/subcommand qualifiers).
+	bareBlockedCmds := make(map[string]bool)
+
 	for i, rule := range cfg.Blocked {
 		if rule.Command == "" {
 			return cfgErr("blocked[%d]: command is required", i)
@@ -203,7 +209,17 @@ func validateConfig(cfg *Config) error {
 		if rule.FlagInBundle != "" && len(rule.FlagInBundle) != 1 {
 			return cfgErr("blocked[%d]: flag_in_bundle %q must be exactly one character", i, rule.FlagInBundle)
 		}
+		if rule.Subcommand != "" && strings.HasPrefix(rule.Subcommand, "-") {
+			return cfgErr("blocked[%d]: subcommand %q must not start with '-'", i, rule.Subcommand)
+		}
+		if rule.Flag != "" {
+			blockedSet[cmdFlag{rule.Command, rule.Flag}] = true
+		}
+		if rule.Flag == "" && rule.Subcommand == "" && rule.FlagInBundle == "" {
+			bareBlockedCmds[rule.Command] = true
+		}
 	}
+
 	for i, rule := range cfg.Require {
 		if rule.Command == "" {
 			return cfgErr("require[%d]: command is required", i)
@@ -219,7 +235,23 @@ func validateConfig(cfg *Config) error {
 				return cfgErr("require[%d]: one_of_flags entry %q must start with '-'", i, f)
 			}
 		}
+		// Cross-rule: if the command is blocked outright, this require is dead code.
+		if bareBlockedCmds[rule.Command] {
+			return cfgErr("require[%d]: command %q is already blocked outright; this rule can never be reached", i, rule.Command)
+		}
+		// Cross-rule: if every flag in one_of_flags is also blocked, the command is unsatisfiable.
+		allBlocked := true
+		for _, f := range rule.OneOfFlags {
+			if !blockedSet[cmdFlag{rule.Command, f}] {
+				allBlocked = false
+				break
+			}
+		}
+		if allBlocked {
+			return cfgErr("require[%d]: every flag in one_of_flags for command %q is also in a blocked rule; the command can never succeed", i, rule.Command)
+		}
 	}
+
 	for i, rule := range cfg.ScopedPaths {
 		if rule.Command == "" {
 			return cfgErr("scoped_paths[%d]: command is required", i)
@@ -228,13 +260,13 @@ func validateConfig(cfg *Config) error {
 			return cfgErr("scoped_paths[%d]: message is required", i)
 		}
 		for _, p := range rule.AllowedPrefixes {
-			if strings.HasPrefix(p, "/") {
-				return cfgErr("scoped_paths[%d]: allowed_prefixes entry %q starts with '/'; git paths are relative to the repo root", i, p)
+			if err := validatePathPrefix(p); err != nil {
+				return cfgErr("scoped_paths[%d]: allowed_prefixes entry %q: %s", i, p, err)
 			}
 		}
 		for _, p := range rule.BlockedPaths {
-			if strings.HasPrefix(p, "/") {
-				return cfgErr("scoped_paths[%d]: blocked_paths entry %q starts with '/'; git paths are relative to the repo root", i, p)
+			if err := validatePathPrefix(p); err != nil {
+				return cfgErr("scoped_paths[%d]: blocked_paths entry %q: %s", i, p, err)
 			}
 		}
 	}
@@ -243,10 +275,21 @@ func validateConfig(cfg *Config) error {
 			return cfgErr("protected_branches[%q]: message is required", branch)
 		}
 		for _, p := range rule.AllowedPathPrefixes {
-			if strings.HasPrefix(p, "/") {
-				return cfgErr("protected_branches[%q]: allowed_path_prefixes entry %q starts with '/'; git paths are relative to the repo root", branch, p)
+			if err := validatePathPrefix(p); err != nil {
+				return cfgErr("protected_branches[%q]: allowed_path_prefixes entry %q: %s", branch, p, err)
 			}
 		}
+	}
+	return nil
+}
+
+// validatePathPrefix rejects paths that are absolute or use .. traversal.
+func validatePathPrefix(p string) error {
+	if strings.HasPrefix(p, "/") {
+		return fmt.Errorf("starts with '/'; git paths are relative to the repo root")
+	}
+	if p == ".." || strings.HasPrefix(p, "../") || strings.Contains(p, "/../") || strings.HasSuffix(p, "/..") {
+		return fmt.Errorf("contains '..'; path traversal is not allowed")
 	}
 	return nil
 }
