@@ -736,8 +736,9 @@ func applyRules(cfg *Config, args []string) {
 
 		// Block explicitly listed paths
 		for _, arg := range posArgs {
+			cleanArg := filepath.Clean(arg)
 			for _, bp := range rule.BlockedPaths {
-				if arg == bp {
+				if cleanArg == bp {
 					block(rule.Message)
 				}
 			}

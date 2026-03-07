@@ -886,6 +886,36 @@ LAWFUL_GIT_GLOBAL_CONFIG="/nonexistent/path/to/config.json" assert_allowed "none
 assert_blocked "scoped path ./prefix blocked" git -C "$REPO" add ./other/file.txt
 assert_passes_through "scoped path ./allowed prefix works" git -C "$REPO" add ./my-project/test.txt
 
+# blocked_paths bypass: ./. should still match "." blocked path
+assert_blocked "blocked_paths ./. normalized to ." git -C "$REPO" add ./.
+
+# LAWFUL_GIT_CONSOLE_CONSENT forces terminal mode (we can't test interactive input,
+# but we can verify it doesn't crash and doesn't show GUI)
+CONSOLE_CONSENT_REPO="$TMPDIR_ROOT/consoleconsentrepo"
+CONSOLE_CONSENT_REMOTE="$TMPDIR_ROOT/consoleconsentremote.git"
+"$REAL_GIT" init --bare "$CONSOLE_CONSENT_REMOTE"
+"$REAL_GIT" init "$CONSOLE_CONSENT_REPO"
+"$REAL_GIT" -C "$CONSOLE_CONSENT_REPO" remote add origin "$CONSOLE_CONSENT_REMOTE"
+echo "x" > "$CONSOLE_CONSENT_REPO/f.txt"
+"$REAL_GIT" -C "$CONSOLE_CONSENT_REPO" add .
+"$REAL_GIT" -C "$CONSOLE_CONSENT_REPO" commit -m "initial"
+"$REAL_GIT" -C "$CONSOLE_CONSENT_REPO" push -u origin main
+cat > "$CONSOLE_CONSENT_REPO/.git-safety.json" <<'EOF'
+{
+  "consent_command": "cat",
+  "blocked": [{ "command": "push", "flags": ["--force"], "action": "consent", "message": "consent" }]
+}
+EOF
+# First attempt should still print instructions even with LAWFUL_GIT_CONSOLE_CONSENT
+console_output=$(LAWFUL_GIT_CONSOLE_CONSENT=1 git -C "$CONSOLE_CONSENT_REPO" push --force 2>&1) || true
+if echo "$console_output" | grep -qF "CONSENT REQUIRED"; then
+    echo "✅ PASS: LAWFUL_GIT_CONSOLE_CONSENT does not break consent flow"
+    PASS=$((PASS + 1))
+else
+    echo "❌ FAIL: LAWFUL_GIT_CONSOLE_CONSENT broke consent flow (got: $console_output)"
+    FAIL=$((FAIL + 1))
+fi
+
 # ── passthrough ───────────────────────────────────────────────────────────────
 echo ""
 echo "=== passthrough ==="
