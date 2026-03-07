@@ -194,6 +194,12 @@ func cfgErr(format string, args ...interface{}) error {
 // validateConfig checks for misconfigurations that would silently
 // misbehave at runtime.
 func validateConfig(cfg *Config) error {
+	if cfg.ConsentCommand != "" {
+		if _, err := exec.LookPath(cfg.ConsentCommand); err != nil {
+			return cfgErr("consent_command: %q not found: %v", cfg.ConsentCommand, err)
+		}
+	}
+
 	// Collect blocked command+flag pairs for cross-rule checks.
 	type cmdFlag struct{ cmd, flag string }
 	blockedSet := make(map[cmdFlag]bool)

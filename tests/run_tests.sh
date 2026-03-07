@@ -499,6 +499,20 @@ cat > "$BADACTION_REPO/.git-safety.json" <<'EOF'
 EOF
 assert_blocked "invalid action value rejected" git -C "$BADACTION_REPO" status
 
+# Invalid consent_command path
+BAD_CONSENT_REPO="$TMPDIR_ROOT/badconsentrepo"
+"$REAL_GIT" init "$BAD_CONSENT_REPO"
+echo "x" > "$BAD_CONSENT_REPO/f.txt"
+"$REAL_GIT" -C "$BAD_CONSENT_REPO" add .
+"$REAL_GIT" -C "$BAD_CONSENT_REPO" commit -m "initial"
+cat > "$BAD_CONSENT_REPO/.git-safety.json" <<'EOF'
+{
+  "consent_command": "/nonexistent/approval-tool",
+  "blocked": [{ "command": "push", "flags": ["--force"], "action": "consent", "message": "bad" }]
+}
+EOF
+assert_blocked "invalid consent_command path rejected" git -C "$BAD_CONSENT_REPO" status
+
 # ── additional edge cases ─────────────────────────────────────────────────────
 echo ""
 echo "=== additional edge cases ==="
