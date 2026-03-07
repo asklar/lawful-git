@@ -169,8 +169,11 @@ func loadConfig() (*Config, error) {
 		return nil, nil
 	}
 
+	// Decode with strict field checking to catch typos/unknown keys.
 	var cfg Config
-	if err := json.Unmarshal(data, &cfg); err != nil {
+	dec := json.NewDecoder(strings.NewReader(string(data)))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("invalid .git-safety.json: %w", err)
 	}
 	if err := validateConfig(&cfg); err != nil {
@@ -179,25 +182,69 @@ func loadConfig() (*Config, error) {
 	return &cfg, nil
 }
 
-// validateConfig checks for common misconfigurations that would silently
+// cfgErr formats a config validation error with a consistent prefix.
+func cfgErr(format string, args ...interface{}) error {
+	return fmt.Errorf("invalid .git-safety.json: "+format, args...)
+}
+
+// validateConfig checks for misconfigurations that would silently
 // misbehave at runtime.
 func validateConfig(cfg *Config) error {
-	for _, rule := range cfg.ScopedPaths {
+	for i, rule := range cfg.Blocked {
+		if rule.Command == "" {
+			return cfgErr("blocked[%d]: command is required", i)
+		}
+		if rule.Message == "" {
+			return cfgErr("blocked[%d]: message is required", i)
+		}
+		if rule.Flag != "" && !strings.HasPrefix(rule.Flag, "-") {
+			return cfgErr("blocked[%d]: flag %q must start with '-'", i, rule.Flag)
+		}
+		if rule.FlagInBundle != "" && len(rule.FlagInBundle) != 1 {
+			return cfgErr("blocked[%d]: flag_in_bundle %q must be exactly one character", i, rule.FlagInBundle)
+		}
+	}
+	for i, rule := range cfg.Require {
+		if rule.Command == "" {
+			return cfgErr("require[%d]: command is required", i)
+		}
+		if rule.Message == "" {
+			return cfgErr("require[%d]: message is required", i)
+		}
+		if len(rule.OneOfFlags) == 0 {
+			return cfgErr("require[%d]: one_of_flags must not be empty", i)
+		}
+		for _, f := range rule.OneOfFlags {
+			if !strings.HasPrefix(f, "-") {
+				return cfgErr("require[%d]: one_of_flags entry %q must start with '-'", i, f)
+			}
+		}
+	}
+	for i, rule := range cfg.ScopedPaths {
+		if rule.Command == "" {
+			return cfgErr("scoped_paths[%d]: command is required", i)
+		}
+		if rule.Message == "" {
+			return cfgErr("scoped_paths[%d]: message is required", i)
+		}
 		for _, p := range rule.AllowedPrefixes {
 			if strings.HasPrefix(p, "/") {
-				return fmt.Errorf("invalid .git-safety.json: allowed_prefixes entry %q starts with '/'; git paths are relative to the repo root", p)
+				return cfgErr("scoped_paths[%d]: allowed_prefixes entry %q starts with '/'; git paths are relative to the repo root", i, p)
 			}
 		}
 		for _, p := range rule.BlockedPaths {
 			if strings.HasPrefix(p, "/") {
-				return fmt.Errorf("invalid .git-safety.json: blocked_paths entry %q starts with '/'; git paths are relative to the repo root", p)
+				return cfgErr("scoped_paths[%d]: blocked_paths entry %q starts with '/'; git paths are relative to the repo root", i, p)
 			}
 		}
 	}
 	for branch, rule := range cfg.ProtectedBranches {
+		if rule.Message == "" {
+			return cfgErr("protected_branches[%q]: message is required", branch)
+		}
 		for _, p := range rule.AllowedPathPrefixes {
 			if strings.HasPrefix(p, "/") {
-				return fmt.Errorf("invalid .git-safety.json: protected_branches[%q].allowed_path_prefixes entry %q starts with '/'; git paths are relative to the repo root", branch, p)
+				return cfgErr("protected_branches[%q]: allowed_path_prefixes entry %q starts with '/'; git paths are relative to the repo root", branch, p)
 			}
 		}
 	}

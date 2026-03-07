@@ -358,6 +358,61 @@ cat > "$ABS_PREFIX_REPO/.git-safety.json" <<'EOF'
 EOF
 assert_blocked "absolute allowed_prefix rejected" git -C "$ABS_PREFIX_REPO" status
 
+# unknown key in config (typo) is rejected
+TYPO_REPO="$TMPDIR_ROOT/typorepo"
+"$REAL_GIT" init "$TYPO_REPO"
+echo "content" > "$TYPO_REPO/file.txt"
+"$REAL_GIT" -C "$TYPO_REPO" add .
+"$REAL_GIT" -C "$TYPO_REPO" commit -m "initial"
+cat > "$TYPO_REPO/.git-safety.json" <<'EOF'
+{ "worktree_only_branch": true }
+EOF
+assert_blocked "unknown key (typo) rejected" git -C "$TYPO_REPO" status
+
+# empty command in blocked rule
+EMPTY_CMD_REPO="$TMPDIR_ROOT/emptycmdrepo"
+"$REAL_GIT" init "$EMPTY_CMD_REPO"
+echo "x" > "$EMPTY_CMD_REPO/f.txt"
+"$REAL_GIT" -C "$EMPTY_CMD_REPO" add .
+"$REAL_GIT" -C "$EMPTY_CMD_REPO" commit -m "initial"
+cat > "$EMPTY_CMD_REPO/.git-safety.json" <<'EOF'
+{ "blocked": [{ "message": "no command" }] }
+EOF
+assert_blocked "empty command in blocked rule rejected" git -C "$EMPTY_CMD_REPO" status
+
+# empty one_of_flags in require rule
+EMPTY_FLAGS_REPO="$TMPDIR_ROOT/emptyflagsrepo"
+"$REAL_GIT" init "$EMPTY_FLAGS_REPO"
+echo "x" > "$EMPTY_FLAGS_REPO/f.txt"
+"$REAL_GIT" -C "$EMPTY_FLAGS_REPO" add .
+"$REAL_GIT" -C "$EMPTY_FLAGS_REPO" commit -m "initial"
+cat > "$EMPTY_FLAGS_REPO/.git-safety.json" <<'EOF'
+{ "require": [{ "command": "push", "one_of_flags": [], "message": "bad" }] }
+EOF
+assert_blocked "empty one_of_flags rejected" git -C "$EMPTY_FLAGS_REPO" status
+
+# flag_in_bundle with multi-char value
+BUNDLE_REPO="$TMPDIR_ROOT/bundlerepo"
+"$REAL_GIT" init "$BUNDLE_REPO"
+echo "x" > "$BUNDLE_REPO/f.txt"
+"$REAL_GIT" -C "$BUNDLE_REPO" add .
+"$REAL_GIT" -C "$BUNDLE_REPO" commit -m "initial"
+cat > "$BUNDLE_REPO/.git-safety.json" <<'EOF'
+{ "blocked": [{ "command": "commit", "flag_in_bundle": "am", "message": "bad" }] }
+EOF
+assert_blocked "multi-char flag_in_bundle rejected" git -C "$BUNDLE_REPO" status
+
+# flag without leading dash
+NO_DASH_REPO="$TMPDIR_ROOT/nodashrepo"
+"$REAL_GIT" init "$NO_DASH_REPO"
+echo "x" > "$NO_DASH_REPO/f.txt"
+"$REAL_GIT" -C "$NO_DASH_REPO" add .
+"$REAL_GIT" -C "$NO_DASH_REPO" commit -m "initial"
+cat > "$NO_DASH_REPO/.git-safety.json" <<'EOF'
+{ "blocked": [{ "command": "push", "flag": "force", "message": "bad" }] }
+EOF
+assert_blocked "flag without dash rejected" git -C "$NO_DASH_REPO" status
+
 # ── passthrough ───────────────────────────────────────────────────────────────
 echo ""
 echo "=== passthrough ==="
