@@ -5,7 +5,7 @@
   "require_upstream_before_bare_push": true,
 
   "blocked": [
-    { "command": "clean",                                       "message": "git clean deletes untracked files." },
+    { "command": "clean",                                      "message": "git clean deletes untracked files." },
     { "command": "stash",       "subcommand": "drop",          "message": "git stash drop can lose stashed work." },
     { "command": "stash",       "subcommand": "clear",         "message": "git stash clear can lose stashed work." },
     { "command": "remote",      "subcommand": "set-url",       "message": "git remote set-url can redirect pushes." },
