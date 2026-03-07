@@ -18,8 +18,8 @@ if (-not $realGitCmd) {
 $realGit = $realGitCmd.Source
 Write-Host "Real git: $realGit"
 
-# Check if lawful-git.exe already exists at install location
-$target = Join-Path $InstallDir "lawful-git.exe"
+# Check if git.exe already exists at install location
+$target = Join-Path $InstallDir "git.exe"
 if (Test-Path $target) {
     Write-Error "$target already exists. Remove it first or manually update it."
     exit 1
@@ -27,8 +27,8 @@ if (Test-Path $target) {
 
 Write-Host ""
 Write-Host "Install plan:"
-Write-Host "  Binary:  $target"
-Write-Host "  Prepend $InstallDir to user PATH"
+Write-Host "  Binary:  $target (lawful-git renamed to git.exe)"
+Write-Host "  Prepend $InstallDir to user PATH (ahead of real git)"
 Write-Host ""
 $answer = Read-Host "Proceed? [y/N]"
 if ($answer -notmatch '^[Yy]$') {
@@ -37,12 +37,12 @@ if ($answer -notmatch '^[Yy]$') {
 }
 
 # Build the binary
-Write-Host "Building lawful-git.exe..."
+Write-Host "Building lawful-git..."
 Push-Location $ScriptDir
 go build -o lawful-git.exe .
 Pop-Location
 
-# Install binary
+# Install binary as git.exe so it intercepts git calls
 if (-not (Test-Path $InstallDir)) {
     New-Item -ItemType Directory -Path $InstallDir | Out-Null
 }

@@ -63,7 +63,7 @@ echo "my-project v3" >> "$REPO/my-project/file.txt"
 
 # Copy lawful-git binary and config into test repo
 cp "$PROJECT_DIR/lawful-git" "$BINDIR/lawful-git"
-cp "$PROJECT_DIR/.git-safety.json" "$REPO/.git-safety.json"
+cp "$PROJECT_DIR/examples/git-safety.json" "$REPO/.git-safety.json"
 
 # Create git symlink in BINDIR
 ln -s "$BINDIR/lawful-git" "$BINDIR/git"

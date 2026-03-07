@@ -2,6 +2,8 @@
 
 A data-driven git guardrail engine for AI agent sessions. `lawful-git` is a drop-in replacement for the `git` binary that enforces per-repo safety policies declared in a `.git-safety.json` file, then `exec`s the real `git` transparently.
 
+**Why?** AI coding agents (Copilot, Cursor, Cline, etc.) can run `git` commands autonomously. Without guardrails, a misconfigured agent can force-push to main, delete branches, or `git clean` your work. `lawful-git` lets you declare what's allowed per-repo — the agent never knows it's being constrained, and your safety rules live in version control alongside the code.
+
 ---
 
 ## What it is
@@ -62,12 +64,12 @@ cd lawful-git
 .\install.ps1
 ```
 
-Installs to `$env:LOCALAPPDATA\lawful-git\` and prepends that directory to the user `PATH` via the registry (ahead of the real git).
+Installs to `$env:LOCALAPPDATA\lawful-git\git.exe` and prepends that directory to the user `PATH` via the registry (ahead of the real git).
 
 #### Uninstall (Windows)
 
 ```powershell
-Remove-Item "$env:LOCALAPPDATA\lawful-git\lawful-git.exe"
+Remove-Item "$env:LOCALAPPDATA\lawful-git\git.exe"
 # Then remove $env:LOCALAPPDATA\lawful-git from your user PATH in System Properties
 ```
 
