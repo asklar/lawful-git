@@ -1,6 +1,6 @@
 ---
 name: release
-description: Create a semver tag release and push it. Use when the user says /release. Expects a semver bump type: patch, minor, or major.
+description: "Create a semver tag release and push it. Use when the user says /release. Expects a semver bump type: patch, minor, or major."
 ---
 
 ## Instructions
