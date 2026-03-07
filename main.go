@@ -158,10 +158,15 @@ func parseGlobalOpts(args []string) (cmdIdx int, repoContext []string) {
 
 // parseConfigFile reads and parses a JSONC config file.
 // Returns nil, nil if the file does not exist.
+// Returns an error if the file exists but cannot be read or is malformed.
 func parseConfigFile(path, label string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, nil
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		// File exists but can't be read (permission denied, etc.) — fail closed.
+		return nil, fmt.Errorf("cannot read %s: %w", label, err)
 	}
 	cleaned := stripJSONComments(string(data))
 	var cfg Config
@@ -451,11 +456,22 @@ func consentFilePath(args []string) string {
 // justification and prompts the user via consent_command or a platform-native dialog.
 func requestConsent(cfg *Config, msg string, args []string) {
 	consentFile := consentFilePath(args)
-	justification, err := os.ReadFile(consentFile)
-	if err != nil {
+	info, statErr := os.Stat(consentFile)
+	if statErr != nil {
 		// First attempt: no justification file — instruct the caller.
 		fmt.Fprintf(os.Stderr, "⚠️  CONSENT REQUIRED: %s\n", msg)
 		fmt.Fprintf(os.Stderr, "To proceed, write your justification to:\n  %s\nThen retry the command.\n", consentFile)
+		os.Exit(1)
+	}
+	const maxConsentSize = 1 << 20 // 1 MB
+	if info.Size() > maxConsentSize {
+		os.Remove(consentFile)
+		fmt.Fprintf(os.Stderr, "❌ BLOCKED: Justification file too large (max 1MB).\n")
+		os.Exit(1)
+	}
+	justification, err := os.ReadFile(consentFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "❌ BLOCKED: Cannot read justification file: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -582,7 +598,7 @@ func showDialogTerminal(prompt string) bool {
 	defer tty.Close()
 
 	fmt.Fprintf(os.Stderr, "\n%s\n\nAllow? [y/N] ", prompt)
-	buf := make([]byte, 8)
+	buf := make([]byte, 64)
 	n, _ := tty.Read(buf)
 	answer := strings.TrimSpace(strings.ToLower(string(buf[:n])))
 	return answer == "y" || answer == "yes"
@@ -734,9 +750,10 @@ func applyRules(cfg *Config, args []string) {
 
 		// All positional args must start with an allowed prefix
 		for _, arg := range posArgs {
+			cleanArg := filepath.Clean(arg)
 			allowed := false
 			for _, prefix := range rule.AllowedPrefixes {
-				if strings.HasPrefix(arg, prefix) {
+				if strings.HasPrefix(cleanArg, prefix) {
 					allowed = true
 					break
 				}

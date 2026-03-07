@@ -8,14 +8,15 @@ A data-driven git guardrail engine for AI agent sessions. `lawful-git` is a drop
 
 When invoked as `git`, `lawful-git`:
 
-1. Resolves the repo root via `git rev-parse --show-toplevel`
-2. Looks for `.git-safety.json` in that root
-3. If found, enforces the rules declared in that file
-4. If no config, or if outside a configured repo, execs the real git unchanged
-5. On rule violation: prints `❌ BLOCKED: <message>` to stderr and exits 1
-6. On success: `exec`s (replacing the process on Unix, forwarding exit code on Windows) the real git with all original args
+1. Loads global config (`~/.lawful-git.json`) and repo config (`.git-safety.json`), merging them
+2. If no config exists, execs the real git unchanged
+3. If config exists, enforces all rules against the command
+4. On rule violation: prints `❌ BLOCKED: <message>` to stderr and exits 1
+5. On success: `exec`s (replacing the process on Unix, forwarding exit code on Windows) the real git with all original args
 
 It produces a single static binary. Cross-platform: Linux, macOS, Windows. No runtime dependencies.
+
+Use `git --lawful-version` to check which version of lawful-git is installed.
 
 ---
 
@@ -85,7 +86,7 @@ lawful-git loads config from two locations and merges them:
 
 Override the global config path with `LAWFUL_GIT_GLOBAL_CONFIG=/path/to/config.json`.
 
-Both files use the same schema. When both exist, they're merged:
+Both files use the same schema (JSONC with `//` and `/* */` comments). When both exist, they're merged:
 
 | Field type | Merge strategy |
 |---|---|
@@ -95,6 +96,28 @@ Both files use the same schema. When both exist, they're merged:
 | `consent_command` | Repo wins if both define it |
 
 If only a global config exists (no repo config, or not in a repo), its rules still apply.
+
+**Example global config** (`~/.lawful-git.json`):
+
+```jsonc
+{
+  // Baseline rules for all repos
+  "blocked": [
+    { "command": "clean", "message": "git clean deletes untracked files." },
+    { "command": "reset", "flags": ["--hard"], "message": "git reset --hard can lose work." }
+  ],
+  "require_upstream_before_bare_push": true
+}
+```
+
+A per-repo `.git-safety.json` can then add repo-specific rules (e.g. scoped_paths, protected_branches) on top of these global defaults.
+
+### Environment variables
+
+| Variable | Description |
+|---|---|
+| `LAWFUL_GIT_GLOBAL_CONFIG` | Override path to global config file |
+| `LAWFUL_GIT_CONSOLE_CONSENT` | Set to `1` to force terminal `y/N` prompt instead of GUI dialog for consent |
 
 ### Schema
 

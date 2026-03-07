@@ -874,6 +874,18 @@ echo "y" > "$PB_MERGE_REPO/repo-only/f.txt"
 "$REAL_GIT" -C "$PB_MERGE_REPO" commit -m "change"
 LAWFUL_GIT_GLOBAL_CONFIG="$PB_MERGE_GLOBAL" assert_passes_through "protected_branches repo overrides global on key conflict" git -C "$PB_MERGE_REPO" push
 
+# Malformed global config — fail closed
+BAD_GLOBAL="$TMPDIR_ROOT/bad-global.json"
+echo "NOT VALID JSON{{{" > "$BAD_GLOBAL"
+LAWFUL_GIT_GLOBAL_CONFIG="$BAD_GLOBAL" assert_blocked "malformed global config fails closed" git -C "$GLOBAL_ONLY_REPO" status
+
+# LAWFUL_GIT_GLOBAL_CONFIG pointing to nonexistent file — passthrough (no config)
+LAWFUL_GIT_GLOBAL_CONFIG="/nonexistent/path/to/config.json" assert_allowed "nonexistent global config passes through" git -C "$CLEAN_REPO" status
+
+# Scoped path bypass: ./my-project/ should still match my-project/ prefix
+assert_blocked "scoped path ./prefix blocked" git -C "$REPO" add ./other/file.txt
+assert_passes_through "scoped path ./allowed prefix works" git -C "$REPO" add ./my-project/test.txt
+
 # ── passthrough ───────────────────────────────────────────────────────────────
 echo ""
 echo "=== passthrough ==="
