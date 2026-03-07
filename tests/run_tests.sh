@@ -77,6 +77,9 @@ echo "clean" > "$CLEAN_REPO/readme.txt"
 # Prepend fake bin dir to PATH so 'git' resolves to lawful-git
 export PATH="$BINDIR:$PATH"
 
+# Snapshot source repo state before tests so we can detect unintended modifications
+SOURCE_STATUS_BEFORE=$("$REAL_GIT" -C "$PROJECT_DIR" status --porcelain 2>/dev/null || true)
+
 # ── Test harness ───────────────────────────────────────────────────────────────
 
 assert_blocked() {
@@ -126,7 +129,9 @@ assert_passes_through() {
     fi
 }
 
-cd "$REPO"
+# Safety check: ensure no test accidentally modifies the lawful-git source repo.
+# We cd into the temp dir so any unqualified git command cannot touch PROJECT_DIR.
+cd "$TMPDIR_ROOT"
 
 # ── blocked (command) ──────────────────────────────────────────────────────────
 echo "=== blocked (command) ==="
@@ -230,10 +235,93 @@ echo "good change" >> "$REPO/vhagar/file.txt"
 "$REAL_GIT" -C "$REPO" commit -m "touch vhagar only"
 assert_allowed "push touching only vhagar/ file allowed" git -C "$REPO" push origin main
 
+# ── require_upstream_before_bare_push ──────────────────────────────────────────
+echo ""
+echo "=== require_upstream_before_bare_push ==="
+# Create a branch with no upstream tracking
+"$REAL_GIT" -C "$REPO" checkout -b no-upstream-branch
+echo "no upstream content" > "$REPO/vhagar/noup.txt"
+"$REAL_GIT" -C "$REPO" add vhagar/noup.txt
+"$REAL_GIT" -C "$REPO" commit -m "commit on no-upstream branch"
+assert_blocked "bare push without upstream blocked" git -C "$REPO" push
+assert_passes_through "explicit push remote+branch allowed (no upstream)" git -C "$REPO" push origin no-upstream-branch
+# Go back to main
+"$REAL_GIT" -C "$REPO" checkout main
+"$REAL_GIT" -C "$REPO" branch -D no-upstream-branch
+# Bare push WITH upstream should be allowed (main has tracking)
+assert_allowed "bare push with upstream allowed" git -C "$REPO" push
+
+# ── push --delete / push -d ───────────────────────────────────────────────────
+echo ""
+echo "=== push --delete / push -d ==="
+assert_blocked "git push --delete blocked" git -C "$REPO" push --delete origin somebranch
+assert_blocked "git push -d blocked"       git -C "$REPO" push -d origin somebranch
+
+# ── +refspec force push ───────────────────────────────────────────────────────
+echo ""
+echo "=== +refspec force push ==="
+# +refspec is an alternative force-push syntax that should be caught by protected_branches
+echo "plus refspec change" >> "$REPO/other/file.txt"
+"$REAL_GIT" -C "$REPO" add other/file.txt
+"$REAL_GIT" -C "$REPO" commit -m "change for +refspec test"
+assert_blocked "push origin +main blocked (touches non-vhagar)" git -C "$REPO" push origin +main
+"$REAL_GIT" -C "$REPO" reset --hard HEAD~1
+
+# ── subcommand with preceding flags ──────────────────────────────────────────
+echo ""
+echo "=== subcommand with preceding flags ==="
+assert_blocked "git remote -v set-url blocked" git -C "$REPO" remote -v set-url origin https://evil.example
+
+# ── --lawful-version ──────────────────────────────────────────────────────────
+echo ""
+echo "=== --lawful-version ==="
+version_output=$(git --lawful-version 2>&1)
+if echo "$version_output" | grep -qF "lawful-git version"; then
+    echo "✅ PASS: git --lawful-version prints version"
+    PASS=$((PASS + 1))
+else
+    echo "❌ FAIL: git --lawful-version did not print version (got: $version_output)"
+    FAIL=$((FAIL + 1))
+fi
+# --version (without lawful-) should pass through to real git
+assert_passes_through "git --version passes through to real git" git --version
+
+# ── malformed config (fail-closed) ───────────────────────────────────────────
+echo ""
+echo "=== malformed config ==="
+BAD_REPO="$TMPDIR_ROOT/badrepo"
+"$REAL_GIT" init "$BAD_REPO"
+echo "content" > "$BAD_REPO/file.txt"
+"$REAL_GIT" -C "$BAD_REPO" add .
+"$REAL_GIT" -C "$BAD_REPO" commit -m "initial"
+echo "NOT VALID JSON{{{" > "$BAD_REPO/.git-safety.json"
+assert_blocked "malformed .git-safety.json causes exit" git -C "$BAD_REPO" status
+
+# ── --no-verify on other commands ─────────────────────────────────────────────
+echo ""
+echo "=== --no-verify on other commands ==="
+# These commands will fail because there's nothing to cherry-pick/merge/am,
+# but lawful-git should block them before git even tries.
+assert_blocked "git cherry-pick --no-verify blocked" git -C "$REPO" cherry-pick --no-verify HEAD
+assert_blocked "git merge --no-verify blocked"       git -C "$REPO" merge --no-verify somebranch
+assert_blocked "git am --no-verify blocked"          git -C "$REPO" am --no-verify
+
 # ── passthrough ───────────────────────────────────────────────────────────────
 echo ""
 echo "=== passthrough ==="
 assert_allowed "git status in repo without .git-safety.json" git -C "$CLEAN_REPO" status
+
+# ── Verify source repo was not modified ───────────────────────────────────────
+SOURCE_STATUS_AFTER=$("$REAL_GIT" -C "$PROJECT_DIR" status --porcelain 2>/dev/null || true)
+if [ "$SOURCE_STATUS_BEFORE" != "$SOURCE_STATUS_AFTER" ]; then
+    echo ""
+    echo "❌ FAIL: Tests modified the source repo!"
+    diff <(echo "$SOURCE_STATUS_BEFORE") <(echo "$SOURCE_STATUS_AFTER") || true
+    FAIL=$((FAIL + 1))
+else
+    echo ""
+    echo "✅ Source repo integrity verified"
+fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo ""

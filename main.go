@@ -53,6 +53,9 @@ type Config struct {
 }
 
 var (
+	// version is set at build time via -ldflags.
+	version = "dev"
+
 	// realGit is the resolved path to the actual git binary (not lawful-git).
 	realGit string
 	// gitContext holds global git options (e.g. ["-C", "/path"]) prepended to
@@ -104,17 +107,18 @@ func runGitOutput(args ...string) (string, error) {
 }
 
 // parseGlobalOpts skips git's global options (like -C, -c, --git-dir) in args
-// and returns the index of the first subcommand argument, plus the -C path if given.
+// and returns the index of the first subcommand argument, plus accumulated
+// repo-locating options (e.g. -C, --git-dir, --work-tree) for subprocess calls.
 // Global options are documented at https://git-scm.com/docs/git#_options .
-func parseGlobalOpts(args []string) (cmdIdx int, dirChange string) {
+func parseGlobalOpts(args []string) (cmdIdx int, repoContext []string) {
 	i := 0
 	for i < len(args) {
 		a := args[i]
 		// Options that consume the next token
 		if (a == "-C" || a == "-c" || a == "--git-dir" || a == "--work-tree" ||
 			a == "--namespace" || a == "--super-prefix" || a == "--exec-path") && i+1 < len(args) {
-			if a == "-C" {
-				dirChange = args[i+1]
+			if a == "-C" || a == "--git-dir" || a == "--work-tree" {
+				repoContext = append(repoContext, a, args[i+1])
 			}
 			i += 2
 			continue
@@ -123,6 +127,9 @@ func parseGlobalOpts(args []string) (cmdIdx int, dirChange string) {
 		if strings.HasPrefix(a, "--git-dir=") || strings.HasPrefix(a, "--work-tree=") ||
 			strings.HasPrefix(a, "--namespace=") || strings.HasPrefix(a, "--super-prefix=") ||
 			strings.HasPrefix(a, "--exec-path=") {
+			if strings.HasPrefix(a, "--git-dir=") || strings.HasPrefix(a, "--work-tree=") {
+				repoContext = append(repoContext, a)
+			}
 			i++
 			continue
 		}
@@ -138,12 +145,12 @@ func parseGlobalOpts(args []string) (cmdIdx int, dirChange string) {
 		}
 		// Version / help — no subcommand follows
 		if a == "--version" || a == "-v" || a == "--help" || a == "-h" {
-			return len(args), dirChange
+			return len(args), repoContext
 		}
 		// Anything else is the subcommand
 		break
 	}
-	return i, dirChange
+	return i, repoContext
 }
 
 // loadConfig reads and parses .git-safety.json from the repo root.
@@ -205,11 +212,17 @@ func hasFlagInBundle(args []string, char string) bool {
 	return false
 }
 
-// positionalArgs returns non-flag arguments (those not starting with '-').
+// positionalArgs returns non-flag arguments. After a "--" separator,
+// all remaining arguments are treated as positional regardless of prefix.
 func positionalArgs(args []string) []string {
 	var result []string
+	endOfFlags := false
 	for _, a := range args {
-		if !strings.HasPrefix(a, "-") {
+		if !endOfFlags && a == "--" {
+			endOfFlags = true
+			continue
+		}
+		if endOfFlags || !strings.HasPrefix(a, "-") {
 			result = append(result, a)
 		}
 	}
@@ -231,7 +244,16 @@ func applyRules(cfg *Config, args []string) {
 			continue
 		}
 		if rule.Subcommand != "" {
-			if len(rest) == 0 || rest[0] != rule.Subcommand {
+			// Find the first non-flag argument for subcommand matching,
+			// since flags may precede the subcommand (e.g. "git remote -v set-url").
+			firstPositional := ""
+			for _, a := range rest {
+				if !strings.HasPrefix(a, "-") {
+					firstPositional = a
+					break
+				}
+			}
+			if firstPositional != rule.Subcommand {
 				continue
 			}
 		}
@@ -428,6 +450,8 @@ func parsePushTarget(args []string) (remote, branch string) {
 	}
 	if len(positional) >= 2 {
 		refspec := positional[1]
+		// Strip leading '+' (force-push prefix on individual refspecs)
+		refspec = strings.TrimPrefix(refspec, "+")
 		// Handle local:remote refspec syntax — take the remote side
 		if idx := strings.LastIndex(refspec, ":"); idx >= 0 {
 			refspec = refspec[idx+1:]
@@ -480,17 +504,23 @@ func main() {
 
 	args := os.Args[1:]
 
+	// Handle --lawful-version before anything else (no git lookup needed)
+	if hasFlag(args, "--lawful-version") {
+		fmt.Printf("lawful-git version %s\n", version)
+		os.Exit(0)
+	}
+
 	// Parse git global options (e.g. -C <path>) to locate the subcommand
 	// and set up gitContext for all subprocess calls.
-	cmdIdx, dirChange := parseGlobalOpts(args)
-	if dirChange != "" {
-		gitContext = []string{"-C", dirChange}
+	cmdIdx, repoCtx := parseGlobalOpts(args)
+	if len(repoCtx) > 0 {
+		gitContext = repoCtx
 	}
 
 	cfg, err := loadConfig()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "lawful-git: config error: %v\n", err)
-		// Fall through: continue without rules rather than hard-failing
+		os.Exit(1)
 	}
 
 	if cfg != nil && cmdIdx < len(args) {
