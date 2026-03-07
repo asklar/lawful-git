@@ -1,0 +1,247 @@
+#!/usr/bin/env bash
+# tests/run_tests.sh — test suite for lawful-git
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+PASS=0
+FAIL=0
+
+# ── Build ──────────────────────────────────────────────────────────────────────
+echo "Building lawful-git..."
+(cd "$PROJECT_DIR" && go build -o lawful-git .) || { echo "❌ Build failed"; exit 1; }
+echo "Build OK"
+echo ""
+
+# ── Setup ─────────────────────────────────────────────────────────────────────
+TMPDIR_ROOT="$(mktemp -d)"
+trap 'rm -rf "$TMPDIR_ROOT"' EXIT
+
+REPO="$TMPDIR_ROOT/testrepo"
+REMOTE="$TMPDIR_ROOT/remote.git"
+BINDIR="$TMPDIR_ROOT/bin"
+CLEAN_REPO="$TMPDIR_ROOT/cleanrepo"   # repo without .git-safety.json
+
+mkdir -p "$REPO" "$BINDIR"
+
+# Save the real git path BEFORE modifying PATH
+REAL_GIT="$(command -v git)"
+
+# Configure git identity (needed for commits)
+GIT_CONFIG_GLOBAL_FILE="$TMPDIR_ROOT/.gitconfig"
+export GIT_CONFIG_GLOBAL="$GIT_CONFIG_GLOBAL_FILE"
+"$REAL_GIT" config --global user.email "test@test.com"
+"$REAL_GIT" config --global user.name "Test User"
+"$REAL_GIT" config --global init.defaultBranch main
+"$REAL_GIT" config --global advice.defaultBranchName false
+
+# Init fake bare remote
+"$REAL_GIT" init --bare "$REMOTE"
+
+# Init test repo
+"$REAL_GIT" init "$REPO"
+"$REAL_GIT" -C "$REPO" remote add origin "$REMOTE"
+
+# Create initial files
+mkdir -p "$REPO/vhagar" "$REPO/other"
+echo "vhagar initial" > "$REPO/vhagar/file.txt"
+echo "other initial"  > "$REPO/other/file.txt"
+
+# Make initial commits (need 3+ so reset --soft HEAD~1 works later)
+"$REAL_GIT" -C "$REPO" add .
+"$REAL_GIT" -C "$REPO" commit -m "commit 1: initial"
+echo "vhagar v2" >> "$REPO/vhagar/file.txt"
+"$REAL_GIT" -C "$REPO" add vhagar/file.txt
+"$REAL_GIT" -C "$REPO" commit -m "commit 2: vhagar update"
+echo "vhagar v3" >> "$REPO/vhagar/file.txt"
+"$REAL_GIT" -C "$REPO" add vhagar/file.txt
+"$REAL_GIT" -C "$REPO" commit -m "commit 3: vhagar update 2"
+
+# Push to fake remote to establish tracking
+"$REAL_GIT" -C "$REPO" push -u origin main
+
+# Copy lawful-git binary and config into test repo
+cp "$PROJECT_DIR/lawful-git" "$BINDIR/lawful-git"
+cp "$PROJECT_DIR/.git-safety.json" "$REPO/.git-safety.json"
+
+# Create git symlink in BINDIR
+ln -s "$BINDIR/lawful-git" "$BINDIR/git"
+
+# Create clean repo (no .git-safety.json) for passthrough test
+"$REAL_GIT" init "$CLEAN_REPO"
+echo "clean" > "$CLEAN_REPO/readme.txt"
+"$REAL_GIT" -C "$CLEAN_REPO" add .
+"$REAL_GIT" -C "$CLEAN_REPO" commit -m "initial"
+
+# Prepend fake bin dir to PATH so 'git' resolves to lawful-git
+export PATH="$BINDIR:$PATH"
+
+# ── Test harness ───────────────────────────────────────────────────────────────
+
+assert_blocked() {
+    local desc="$1"
+    shift
+    local output exit_code=0
+    output=$("$@" 2>&1) || exit_code=$?
+    if [ "$exit_code" -eq 0 ]; then
+        echo "❌ FAIL: $desc (expected blocked, but exited 0)"
+        FAIL=$((FAIL + 1))
+    else
+        echo "✅ PASS: $desc"
+        PASS=$((PASS + 1))
+    fi
+}
+
+assert_allowed() {
+    local desc="$1"
+    shift
+    local output exit_code=0
+    output=$("$@" 2>&1) || exit_code=$?
+    # Fail only if lawful-git itself blocked it
+    if echo "$output" | grep -qF "❌ BLOCKED:"; then
+        echo "❌ FAIL: $desc (was BLOCKED by lawful-git)"
+        FAIL=$((FAIL + 1))
+    elif [ "$exit_code" -ne 0 ]; then
+        echo "❌ FAIL: $desc (exited $exit_code: $output)"
+        FAIL=$((FAIL + 1))
+    else
+        echo "✅ PASS: $desc"
+        PASS=$((PASS + 1))
+    fi
+}
+
+# assert_passes_through: lawful-git must NOT block it (git may still fail)
+assert_passes_through() {
+    local desc="$1"
+    shift
+    local output
+    output=$("$@" 2>&1) || true
+    if echo "$output" | grep -qF "❌ BLOCKED:"; then
+        echo "❌ FAIL: $desc (was BLOCKED by lawful-git)"
+        FAIL=$((FAIL + 1))
+    else
+        echo "✅ PASS: $desc"
+        PASS=$((PASS + 1))
+    fi
+}
+
+cd "$REPO"
+
+# ── blocked (command) ──────────────────────────────────────────────────────────
+echo "=== blocked (command) ==="
+assert_blocked "git clean -fd blocked"   git -C "$REPO" clean -fd
+assert_blocked "git rebase main blocked" git -C "$REPO" rebase main
+
+# ── blocked (subcommand) ───────────────────────────────────────────────────────
+echo ""
+echo "=== blocked (subcommand) ==="
+assert_blocked "git stash drop blocked"                        git -C "$REPO" stash drop
+assert_blocked "git stash clear blocked"                       git -C "$REPO" stash clear
+assert_blocked "git stash pop blocked"                         git -C "$REPO" stash pop
+assert_allowed "git stash list allowed"                        git -C "$REPO" stash list
+assert_blocked "git remote set-url blocked"                    git -C "$REPO" remote set-url origin https://evil.example
+assert_blocked "git worktree remove blocked"                   git -C "$REPO" worktree remove foo
+
+# ── blocked (flag) ────────────────────────────────────────────────────────────
+echo ""
+echo "=== blocked (flag) ==="
+assert_blocked "git push --force blocked"             git -C "$REPO" push --force
+assert_blocked "git push --force-with-lease blocked"  git -C "$REPO" push --force-with-lease
+assert_blocked "git push -f blocked"                  git -C "$REPO" push -f
+assert_blocked "git reset --hard blocked"             git -C "$REPO" reset --hard
+assert_blocked "git reset --mixed blocked"            git -C "$REPO" reset --mixed
+assert_blocked "git tag -d v1 blocked"                git -C "$REPO" tag -d v1
+assert_allowed "git reset --soft HEAD~1 allowed"      git -C "$REPO" reset --soft HEAD~1
+# Restore: go back to exactly where we were (ORIG_HEAD) to keep history linear with origin
+"$REAL_GIT" -C "$REPO" reset --hard ORIG_HEAD
+
+# ── blocked (--no-verify) ─────────────────────────────────────────────────────
+echo ""
+echo "=== blocked (--no-verify) ==="
+assert_blocked "git commit --no-verify blocked"  git -C "$REPO" commit --no-verify -m "test"
+assert_blocked "git push --no-verify blocked"    git -C "$REPO" push --no-verify
+# git log does not accept --no-verify; we only verify lawful-git passes it through
+assert_passes_through "git log --no-verify passes through (not gated)" git -C "$REPO" log --no-verify
+
+# ── blocked (flag_in_bundle) ──────────────────────────────────────────────────
+echo ""
+echo "=== blocked (flag_in_bundle) ==="
+assert_blocked "git commit -a -m blocked"   git -C "$REPO" commit -a -m "test"
+assert_blocked "git commit -am blocked"     git -C "$REPO" commit -am "test"
+# Stage a new file so 'git commit -m' succeeds
+echo "staged content" > "$REPO/vhagar/staged.txt"
+"$REAL_GIT" -C "$REPO" add vhagar/staged.txt
+assert_allowed "git commit -m allowed"      git -C "$REPO" commit -m "test commit"
+
+# ── require ───────────────────────────────────────────────────────────────────
+echo ""
+echo "=== require ==="
+assert_blocked "git restore somefile blocked"           git -C "$REPO" restore vhagar/file.txt
+# Stage a file so 'git restore --staged' has something to unstage
+echo "for staging" > "$REPO/vhagar/tostage.txt"
+"$REAL_GIT" -C "$REPO" add vhagar/tostage.txt
+assert_allowed "git restore --staged somefile allowed"  git -C "$REPO" restore --staged vhagar/tostage.txt
+# Discard the unstaged file
+"$REAL_GIT" -C "$REPO" checkout -- vhagar/tostage.txt 2>/dev/null || true
+rm -f "$REPO/vhagar/tostage.txt"
+
+# ── scoped_paths ──────────────────────────────────────────────────────────────
+echo ""
+echo "=== scoped_paths ==="
+assert_blocked "git add . blocked"                   git -C "$REPO" add .
+assert_blocked "git add -A blocked"                  git -C "$REPO" add -A
+# Provide a modified vhagar file for the "allowed" add tests
+echo "modified" >> "$REPO/vhagar/file.txt"
+assert_allowed "git add -A vhagar/file.txt allowed"  git -C "$REPO" add -A vhagar/file.txt
+# Modify again (previous add staged it)
+echo "modified2" >> "$REPO/vhagar/file.txt"
+assert_allowed "git add vhagar/file.txt allowed"     git -C "$REPO" add vhagar/file.txt
+assert_blocked "git add other/file.txt blocked"      git -C "$REPO" add other/file.txt
+# Clean up staged changes so later tests have a clean state
+"$REAL_GIT" -C "$REPO" checkout HEAD -- vhagar/file.txt
+
+# ── worktree_only_branches ────────────────────────────────────────────────────
+echo ""
+echo "=== worktree_only_branches ==="
+assert_blocked "git switch main blocked"          git -C "$REPO" switch main
+assert_blocked "git checkout main blocked"        git -C "$REPO" checkout main
+assert_allowed "git checkout -- clean file allowed" git -C "$REPO" checkout -- vhagar/file.txt
+# Make vhagar/file.txt dirty
+echo "dirty content" >> "$REPO/vhagar/file.txt"
+assert_blocked "git checkout -- dirty file blocked" git -C "$REPO" checkout -- vhagar/file.txt
+# Restore dirty file with real git
+"$REAL_GIT" -C "$REPO" checkout -- vhagar/file.txt
+
+# ── protected_branches ────────────────────────────────────────────────────────
+echo ""
+echo "=== protected_branches ==="
+# Commit touching non-vhagar file → push should be blocked
+echo "bad change" >> "$REPO/other/file.txt"
+"$REAL_GIT" -C "$REPO" add other/file.txt
+"$REAL_GIT" -C "$REPO" commit -m "touch non-vhagar"
+assert_blocked "push touching non-vhagar file blocked" git -C "$REPO" push origin main
+# Reset the bad commit
+"$REAL_GIT" -C "$REPO" reset --hard HEAD~1
+
+# Commit touching only vhagar/ file → push should be allowed
+echo "good change" >> "$REPO/vhagar/file.txt"
+"$REAL_GIT" -C "$REPO" add vhagar/file.txt
+"$REAL_GIT" -C "$REPO" commit -m "touch vhagar only"
+assert_allowed "push touching only vhagar/ file allowed" git -C "$REPO" push origin main
+
+# ── passthrough ───────────────────────────────────────────────────────────────
+echo ""
+echo "=== passthrough ==="
+assert_allowed "git status in repo without .git-safety.json" git -C "$CLEAN_REPO" status
+
+# ── Summary ───────────────────────────────────────────────────────────────────
+echo ""
+echo "=============================="
+echo "Results: $PASS passed, $FAIL failed"
+echo "=============================="
+
+if [ "$FAIL" -gt 0 ]; then
+    exit 1
+fi
+exit 0
