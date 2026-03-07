@@ -51,23 +51,23 @@ Invoke-WebRequest -Uri $Url -OutFile $Target
 # Determine if real git is in system PATH (common case: C:\Program Files\Git\cmd)
 $SystemPath = [Environment]::GetEnvironmentVariable('PATH', 'Machine')
 $GitInSystemPath = $SystemPath -like "*$RealGitDir*"
+$AlreadyInSystemPath = $SystemPath -like "*$InstallDir*"
+$AlreadyInUserPath = ([Environment]::GetEnvironmentVariable('PATH', 'User')) -like "*$InstallDir*"
 
-if ($GitInSystemPath) {
+if ($AlreadyInSystemPath -or $AlreadyInUserPath) {
+    Write-Host "PATH already configured."
+} elseif ($GitInSystemPath) {
     Write-Host ""
     Write-Host "Git is in the system PATH. lawful-git needs to be added to the system PATH"
     Write-Host "(ahead of git) to intercept git calls. This requires administrator privileges."
     Write-Host ""
 
-    # Check if already elevated
     $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
     if ($isAdmin) {
-        $SystemPath = [Environment]::GetEnvironmentVariable('PATH', 'Machine')
-        if ($SystemPath -notlike "*$InstallDir*") {
-            [Environment]::SetEnvironmentVariable('PATH', "$InstallDir;$SystemPath", 'Machine')
-            $env:PATH = "$InstallDir;$env:PATH"
-            Write-Host "Added $InstallDir to system PATH (ahead of git)."
-        }
+        [Environment]::SetEnvironmentVariable('PATH', "$InstallDir;$SystemPath", 'Machine')
+        $env:PATH = "$InstallDir;$env:PATH"
+        Write-Host "Added $InstallDir to system PATH (ahead of git)."
     } else {
         Write-Host "Requesting elevation to modify system PATH..."
         $script = @"
