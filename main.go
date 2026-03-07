@@ -432,8 +432,23 @@ func showDialogMacOS(prompt string) bool {
 	return strings.Contains(string(out), "Allow")
 }
 
-// showDialogLinux tries zenity, then falls back to terminal.
+// isWSL reports whether we're running inside Windows Subsystem for Linux.
+func isWSL() bool {
+	data, err := os.ReadFile("/proc/version")
+	if err != nil {
+		return false
+	}
+	lower := strings.ToLower(string(data))
+	return strings.Contains(lower, "microsoft") || strings.Contains(lower, "wsl")
+}
+
+// showDialogLinux tries WSL (Windows MessageBox), zenity, then falls back to terminal.
 func showDialogLinux(prompt string) bool {
+	if isWSL() {
+		if _, err := exec.LookPath("powershell.exe"); err == nil {
+			return showDialogWSL(prompt)
+		}
+	}
 	if _, err := exec.LookPath("zenity"); err == nil {
 		cmd := exec.Command("zenity", "--question", "--title=lawful-git",
 			"--text="+prompt, "--ok-label=Allow", "--cancel-label=Deny",
@@ -441,6 +456,25 @@ func showDialogLinux(prompt string) bool {
 		if cmd.Run() == nil {
 			return true
 		}
+		return false
+	}
+	return showDialogTerminal(prompt)
+}
+
+// showDialogWSL calls powershell.exe to show a Windows-native MessageBox from WSL.
+func showDialogWSL(prompt string) bool {
+	escaped := strings.ReplaceAll(strings.ReplaceAll(prompt, "'", "''"), "\n", "`n")
+	script := fmt.Sprintf(
+		`Add-Type -AssemblyName System.Windows.Forms; `+
+			`$result = [System.Windows.Forms.MessageBox]::Show('%s', 'lawful-git', 'YesNo', 'Warning'); `+
+			`if ($result -eq 'Yes') { exit 0 } else { exit 1 }`,
+		escaped)
+	cmd := exec.Command("powershell.exe", "-NoProfile", "-Command", script)
+	err := cmd.Run()
+	if err == nil {
+		return true
+	}
+	if cmd.ProcessState != nil && cmd.ProcessState.ExitCode() == 1 {
 		return false
 	}
 	return showDialogTerminal(prompt)
