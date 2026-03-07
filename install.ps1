@@ -3,6 +3,7 @@
 #Requires -Version 5.1
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 $InstallDir = "$env:LOCALAPPDATA\lawful-git"
 $Target = Join-Path $InstallDir "git.exe"
