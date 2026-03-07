@@ -1,0 +1,50 @@
+{
+  "worktree_only_branches": true,
+  "check_dirty_on_checkout": true,
+  "require_upstream_before_bare_push": true,
+
+  "blocked": [
+    { "command": "clean",                                       "message": "git clean deletes untracked files." },
+    { "command": "rebase",                                      "message": "git rebase rewrites history." },
+    { "command": "stash",       "subcommand": "drop",          "message": "git stash drop can lose stashed work." },
+    { "command": "stash",       "subcommand": "clear",         "message": "git stash clear can lose stashed work." },
+    { "command": "stash",       "subcommand": "pop",           "message": "git stash pop can lose stashed work." },
+    { "command": "remote",      "subcommand": "set-url",       "message": "git remote set-url can redirect pushes." },
+    { "command": "worktree",    "subcommand": "remove",        "message": "git worktree remove can delete work." },
+    { "command": "push",        "flags": ["--force", "--force-with-lease", "-f"], "message": "Force push requires approval." },
+    { "command": "push",        "flags": ["--delete", "-d"],   "message": "Remote branch deletion requires approval." },
+    { "command": "reset",       "flags": ["--hard"],           "message": "git reset --hard can lose work." },
+    { "command": "reset",       "flags": ["--mixed"],          "message": "git reset --mixed can lose work." },
+    { "command": "tag",         "flags": ["-d", "--delete"],   "message": "Tag deletion requires approval." },
+    { "command": "commit",      "flags": ["-a"],               "message": "git commit -a stages all changes implicitly." },
+    { "command": "commit",      "flags": ["--no-verify"],      "message": "Hooks exist for a reason." },
+    { "command": "merge",       "flags": ["--no-verify"],      "message": "Hooks exist for a reason." },
+    { "command": "push",        "flags": ["--no-verify"],      "message": "Hooks exist for a reason." },
+    { "command": "am",          "flags": ["--no-verify"],      "message": "Hooks exist for a reason." },
+    { "command": "cherry-pick", "flags": ["--no-verify"],      "message": "Hooks exist for a reason." }
+  ],
+
+  "require": [
+    {
+      "command": "restore",
+      "one_of_flags": ["--staged", "-S"],
+      "message": "git restore without --staged discards uncommitted changes."
+    }
+  ],
+
+  "scoped_paths": [
+    {
+      "command": "add",
+      "blocked_paths": ["."],
+      "allowed_prefixes": ["my-project/"],
+      "message": "git add must be scoped to my-project/. Use explicit paths."
+    }
+  ],
+
+  "protected_branches": {
+    "main": {
+      "allowed_path_prefixes": ["my-project/"],
+      "message": "Direct pushes to main must only touch my-project/. Use a branch and PR for other changes."
+    }
+  }
+}
