@@ -351,7 +351,7 @@ func applyRules(cfg *Config, args []string) {
 						afterSep = true
 						continue
 					}
-					if afterSep && !strings.HasPrefix(a, "-") {
+					if afterSep {
 						targets = append(targets, a)
 					}
 				}

@@ -306,6 +306,47 @@ assert_blocked "git cherry-pick --no-verify blocked" git -C "$REPO" cherry-pick 
 assert_blocked "git merge --no-verify blocked"       git -C "$REPO" merge --no-verify somebranch
 assert_blocked "git am --no-verify blocked"          git -C "$REPO" am --no-verify
 
+# ── additional edge cases ─────────────────────────────────────────────────────
+echo ""
+echo "=== additional edge cases ==="
+
+# tag --delete (long form)
+assert_blocked "git tag --delete v1 blocked" git -C "$REPO" tag --delete v1
+
+# checkout -b blocked by worktree_only (no -- separator)
+assert_blocked "git checkout -b newbranch blocked" git -C "$REPO" checkout -b newbranch
+
+# add --all (long form of -A) blocked by scoped_paths
+assert_blocked "git add --all blocked" git -C "$REPO" add --all
+
+# restore -S (short form of --staged) allowed
+echo "for short staged" > "$REPO/vhagar/shortstage.txt"
+"$REAL_GIT" -C "$REPO" add vhagar/shortstage.txt
+assert_allowed "git restore -S allowed" git -C "$REPO" restore -S vhagar/shortstage.txt
+rm -f "$REPO/vhagar/shortstage.txt"
+
+# global flag before blocked subcommand
+assert_blocked "git --no-pager push --force blocked" git --no-pager -C "$REPO" push --force
+
+# push with local:remote refspec syntax hitting protected_branches
+echo "refspec change" >> "$REPO/other/file.txt"
+"$REAL_GIT" -C "$REPO" add other/file.txt
+"$REAL_GIT" -C "$REPO" commit -m "change for refspec test"
+assert_blocked "push origin main:main blocked (non-vhagar)" git -C "$REPO" push origin main:main
+"$REAL_GIT" -C "$REPO" reset --hard HEAD~1
+
+# empty config {} — valid JSON, no rules, should passthrough
+EMPTY_CFG_REPO="$TMPDIR_ROOT/emptycfgrepo"
+"$REAL_GIT" init "$EMPTY_CFG_REPO"
+echo "content" > "$EMPTY_CFG_REPO/file.txt"
+"$REAL_GIT" -C "$EMPTY_CFG_REPO" add .
+"$REAL_GIT" -C "$EMPTY_CFG_REPO" commit -m "initial"
+echo '{}' > "$EMPTY_CFG_REPO/.git-safety.json"
+assert_allowed "empty config {} passes through" git -C "$EMPTY_CFG_REPO" status
+
+# blocked path after -- separator (git add -- .)
+assert_blocked "git add -- . blocked" git -C "$REPO" add -- .
+
 # ── passthrough ───────────────────────────────────────────────────────────────
 echo ""
 echo "=== passthrough ==="
