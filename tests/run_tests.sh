@@ -360,7 +360,114 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+# consent_command that denies (exits non-zero)
+cat > "$CONSENT_REPO/.git-safety.json" <<'EOF'
+{
+  "consent_command": "false",
+  "blocked": [
+    { "command": "push", "flag": "--force", "action": "consent", "message": "Force push requires consent." }
+  ]
+}
+EOF
+# Set up a new consent file for a force push (need the path from a first attempt)
+deny_output=$(git -C "$CONSENT_REPO" push --force 2>&1) || true
+deny_consent_file=$(echo "$deny_output" | grep -A1 "write your justification to:" | tail -1 | sed 's/^[[:space:]]*//' | tr -d '[:space:]')
+if [ -n "$deny_consent_file" ] && echo "$deny_consent_file" | grep -q "^/"; then
+    echo "I really want to force push" > "$deny_consent_file"
+    assert_blocked "consent_command denial blocks operation" git -C "$CONSENT_REPO" push --force
+    rm -f "$deny_consent_file"
+else
+    echo "❌ FAIL: could not set up denial test"
+    FAIL=$((FAIL + 1))
+fi
+
+# Empty justification file should be rejected
+cat > "$CONSENT_REPO/.git-safety.json" <<'EOF'
+{
+  "consent_command": "cat",
+  "blocked": [
+    { "command": "push", "flag": "--force", "action": "consent", "message": "Force push requires consent." }
+  ]
+}
+EOF
+empty_output=$(git -C "$CONSENT_REPO" push --force 2>&1) || true
+empty_consent_file=$(echo "$empty_output" | grep -A1 "write your justification to:" | tail -1 | sed 's/^[[:space:]]*//' | tr -d '[:space:]')
+if [ -n "$empty_consent_file" ] && echo "$empty_consent_file" | grep -q "^/"; then
+    echo "" > "$empty_consent_file"
+    empty_retry_output=$(git -C "$CONSENT_REPO" push --force 2>&1) || true
+    if echo "$empty_retry_output" | grep -qF "Justification file is empty"; then
+        echo "✅ PASS: empty justification file rejected"
+        PASS=$((PASS + 1))
+    else
+        echo "❌ FAIL: empty justification file not rejected (got: $empty_retry_output)"
+        FAIL=$((FAIL + 1))
+    fi
+    rm -f "$empty_consent_file"
+else
+    echo "❌ FAIL: could not set up empty justification test"
+    FAIL=$((FAIL + 1))
+fi
+
+# Validate consent_command receives correct JSON payload (repo, branch, args, message, justification)
+VALIDATE_SCRIPT="$TMPDIR_ROOT/validate_consent.sh"
+cat > "$VALIDATE_SCRIPT" <<'SCRIPT'
+#!/bin/bash
+# Read stdin JSON and validate all expected fields are present
+input=$(cat)
+ok=true
+for field in '"message"' '"justification"' '"args"' '"repo"' '"branch"'; do
+    if ! echo "$input" | grep -qF "$field"; then
+        echo "missing field: $field" >&2
+        ok=false
+    fi
+done
+# Verify repo field matches our consent repo path
+if ! echo "$input" | grep -qF "consentrepo"; then
+    echo "repo field does not contain expected path" >&2
+    ok=false
+fi
+# Verify args contain --force
+if ! echo "$input" | grep -qF -- "--force"; then
+    echo "args does not contain --force" >&2
+    ok=false
+fi
+# Verify justification text is present
+if ! echo "$input" | grep -qF "payload test justification"; then
+    echo "justification text not found" >&2
+    ok=false
+fi
+if $ok; then exit 0; else exit 1; fi
+SCRIPT
+chmod +x "$VALIDATE_SCRIPT"
+
+cat > "$CONSENT_REPO/.git-safety.json" <<EOF
+{
+  "consent_command": "$VALIDATE_SCRIPT",
+  "blocked": [
+    { "command": "push", "flag": "--force", "action": "consent", "message": "Force push requires consent." }
+  ]
+}
+EOF
+payload_output=$(git -C "$CONSENT_REPO" push --force 2>&1) || true
+payload_consent_file=$(echo "$payload_output" | grep -A1 "write your justification to:" | tail -1 | sed 's/^[[:space:]]*//' | tr -d '[:space:]')
+if [ -n "$payload_consent_file" ] && echo "$payload_consent_file" | grep -q "^/"; then
+    echo "payload test justification" > "$payload_consent_file"
+    assert_passes_through "consent_command receives correct JSON payload" git -C "$CONSENT_REPO" push --force
+else
+    echo "❌ FAIL: could not set up payload validation test"
+    FAIL=$((FAIL + 1))
+fi
+
 # Hard-blocked rules should still block even with consent_command configured
+cat > "$CONSENT_REPO/.git-safety.json" <<'EOF'
+{
+  "consent_command": "cat",
+  "blocked": [
+    { "command": "push", "flag": "--force", "action": "consent", "message": "Force push requires consent." },
+    { "command": "clean", "message": "git clean is blocked." }
+  ]
+}
+EOF
 assert_blocked "hard block still works with consent_command" git -C "$CONSENT_REPO" clean -fd
 
 # Invalid action value in config
