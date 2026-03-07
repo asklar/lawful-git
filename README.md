@@ -74,7 +74,31 @@ Remove-Item "$env:LOCALAPPDATA\lawful-git\lawful-git.exe"
 
 ## Configuration reference
 
-Place `.git-safety.json` in the root of the repository you want to guard. All keys are optional.
+### Config locations
+
+lawful-git loads config from two locations and merges them:
+
+| Location | Purpose |
+|---|---|
+| `~/.lawful-git.json` | **Global** (per-user) — applies to all repos |
+| `.git-safety.json` (repo root) | **Per-repo** — augments global config |
+
+Override the global config path with `LAWFUL_GIT_GLOBAL_CONFIG=/path/to/config.json`.
+
+Both files use the same schema. When both exist, they're merged:
+
+| Field type | Merge strategy |
+|---|---|
+| Arrays (`blocked`, `require`, `scoped_paths`) | Union — repo rules appended to global |
+| Maps (`protected_branches`) | Union — repo wins on key conflict |
+| Booleans (`worktree_only_branches`, etc.) | OR — either config enabling it turns it on |
+| `consent_command` | Repo wins if both define it |
+
+If only a global config exists (no repo config, or not in a repo), its rules still apply.
+
+### Schema
+
+All keys are optional.
 
 ```jsonc
 {

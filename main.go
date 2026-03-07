@@ -156,37 +156,103 @@ func parseGlobalOpts(args []string) (cmdIdx int, repoContext []string) {
 	return i, repoContext
 }
 
-// loadConfig reads and parses .git-safety.json from the repo root.
-// Returns nil, nil when not in a git repo or when no config file exists —
-// intentional passthrough: lawful-git is transparent outside configured repos.
-func loadConfig() (*Config, error) {
-	root, err := runGitOutput("rev-parse", "--show-toplevel")
-	if err != nil {
-		// Not inside a git repo; pass through to real git unchanged.
-		return nil, nil
-	}
-
-	configPath := filepath.Join(root, ".git-safety.json")
-	data, err := os.ReadFile(configPath)
+// parseConfigFile reads and parses a JSONC config file.
+// Returns nil, nil if the file does not exist.
+func parseConfigFile(path, label string) (*Config, error) {
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, nil
 	}
-
-	// Strip JSONC comments (// and /* */) before decoding.
 	cleaned := stripJSONComments(string(data))
-
-	// Decode with strict field checking to catch typos/unknown keys.
 	var cfg Config
 	dec := json.NewDecoder(strings.NewReader(cleaned))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&cfg); err != nil {
-		return nil, fmt.Errorf("invalid .git-safety.json: %w", err)
+		return nil, fmt.Errorf("invalid %s: %w", label, err)
 	}
-	if err := validateConfig(&cfg); err != nil {
+	return &cfg, nil
+}
+
+// globalConfigPath returns the path to the global config file.
+func globalConfigPath() string {
+	if p := os.Getenv("LAWFUL_GIT_GLOBAL_CONFIG"); p != "" {
+		return p
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".lawful-git.json")
+}
+
+// mergeConfigs combines a global and repo config. Arrays are unioned,
+// booleans use OR logic, maps are merged (repo wins on key conflict),
+// and consent_command uses repo if set.
+func mergeConfigs(global, repo *Config) *Config {
+	if global == nil {
+		return repo
+	}
+	if repo == nil {
+		return global
+	}
+	merged := Config{
+		Blocked:                       append(append([]BlockedRule{}, global.Blocked...), repo.Blocked...),
+		Require:                       append(append([]RequireRule{}, global.Require...), repo.Require...),
+		ScopedPaths:                   append(append([]ScopedPathRule{}, global.ScopedPaths...), repo.ScopedPaths...),
+		WorktreeOnlyBranches:          global.WorktreeOnlyBranches || repo.WorktreeOnlyBranches,
+		RequireUpstreamBeforeBarePush: global.RequireUpstreamBeforeBarePush || repo.RequireUpstreamBeforeBarePush,
+		CheckDirtyOnCheckout:          global.CheckDirtyOnCheckout || repo.CheckDirtyOnCheckout,
+		ConsentCommand:                global.ConsentCommand,
+	}
+	if repo.ConsentCommand != "" {
+		merged.ConsentCommand = repo.ConsentCommand
+	}
+	// Merge protected_branches maps (repo wins on key conflict).
+	merged.ProtectedBranches = make(map[string]ProtectedBranchConfig)
+	for k, v := range global.ProtectedBranches {
+		merged.ProtectedBranches[k] = v
+	}
+	for k, v := range repo.ProtectedBranches {
+		merged.ProtectedBranches[k] = v
+	}
+	return &merged
+}
+
+// loadConfig reads global (~/.lawful-git.json) and repo (.git-safety.json)
+// configs, merges them, and validates the result.
+// Returns nil, nil when no config exists at all — intentional passthrough.
+func loadConfig() (*Config, error) {
+	// Load global config.
+	var globalCfg *Config
+	if gp := globalConfigPath(); gp != "" {
+		var err error
+		globalCfg, err = parseConfigFile(gp, filepath.Base(gp))
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Load repo config.
+	var repoCfg *Config
+	root, err := runGitOutput("rev-parse", "--show-toplevel")
+	if err == nil {
+		configPath := filepath.Join(root, ".git-safety.json")
+		repoCfg, err = parseConfigFile(configPath, ".git-safety.json")
+		if err != nil {
+			return nil, err
+		}
+		repoRoot = filepath.FromSlash(root)
+	}
+
+	if globalCfg == nil && repoCfg == nil {
+		return nil, nil
+	}
+
+	merged := mergeConfigs(globalCfg, repoCfg)
+	if err := validateConfig(merged); err != nil {
 		return nil, err
 	}
-	repoRoot = filepath.FromSlash(root)
-	return &cfg, nil
+	return merged, nil
 }
 
 // stripJSONComments removes // line comments and /* */ block comments from

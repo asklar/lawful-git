@@ -774,6 +774,106 @@ cat > "$UNSAT_REPO/.git-safety.json" <<'EOF'
 EOF
 assert_blocked "unsatisfiable require (all flags blocked) rejected" git -C "$UNSAT_REPO" status
 
+# ── global config ─────────────────────────────────────────────────────────────
+echo ""
+echo "=== global config ==="
+
+# Global-only: no repo config, global blocks clean
+GLOBAL_ONLY_REPO="$TMPDIR_ROOT/globalonlyrepo"
+"$REAL_GIT" init "$GLOBAL_ONLY_REPO"
+echo "x" > "$GLOBAL_ONLY_REPO/f.txt"
+"$REAL_GIT" -C "$GLOBAL_ONLY_REPO" add .
+"$REAL_GIT" -C "$GLOBAL_ONLY_REPO" commit -m "initial"
+# No .git-safety.json in repo
+GLOBAL_CFG="$TMPDIR_ROOT/global-lawful-git.json"
+cat > "$GLOBAL_CFG" <<'EOF'
+{ "blocked": [{ "command": "clean", "message": "global blocks clean" }] }
+EOF
+LAWFUL_GIT_GLOBAL_CONFIG="$GLOBAL_CFG" assert_blocked "global-only config blocks clean" git -C "$GLOBAL_ONLY_REPO" clean -fd
+LAWFUL_GIT_GLOBAL_CONFIG="$GLOBAL_CFG" assert_allowed "global-only config allows status" git -C "$GLOBAL_ONLY_REPO" status
+
+# Merge: global blocks clean, repo blocks rebase — both should fire
+MERGE_REPO="$TMPDIR_ROOT/mergerepo"
+"$REAL_GIT" init "$MERGE_REPO"
+echo "x" > "$MERGE_REPO/f.txt"
+"$REAL_GIT" -C "$MERGE_REPO" add .
+"$REAL_GIT" -C "$MERGE_REPO" commit -m "initial"
+cat > "$MERGE_REPO/.git-safety.json" <<'EOF'
+{ "blocked": [{ "command": "rebase", "message": "repo blocks rebase" }] }
+EOF
+MERGE_GLOBAL="$TMPDIR_ROOT/merge-global.json"
+cat > "$MERGE_GLOBAL" <<'EOF'
+{ "blocked": [{ "command": "clean", "message": "global blocks clean" }] }
+EOF
+LAWFUL_GIT_GLOBAL_CONFIG="$MERGE_GLOBAL" assert_blocked "merged config blocks clean (from global)" git -C "$MERGE_REPO" clean -fd
+LAWFUL_GIT_GLOBAL_CONFIG="$MERGE_GLOBAL" assert_blocked "merged config blocks rebase (from repo)" git -C "$MERGE_REPO" rebase
+
+# Boolean OR: global sets worktree_only, repo doesn't — should still be on
+cat > "$MERGE_GLOBAL" <<'EOF'
+{ "worktree_only_branches": true }
+EOF
+cat > "$MERGE_REPO/.git-safety.json" <<'EOF'
+{}
+EOF
+LAWFUL_GIT_GLOBAL_CONFIG="$MERGE_GLOBAL" assert_blocked "boolean OR: global worktree_only applies" git -C "$MERGE_REPO" switch main
+
+# consent_command: repo overrides global
+CONSENT_OVERRIDE_REPO="$TMPDIR_ROOT/consentoverriderepo"
+CONSENT_OVERRIDE_REMOTE="$TMPDIR_ROOT/consentoverrideremote.git"
+"$REAL_GIT" init --bare "$CONSENT_OVERRIDE_REMOTE"
+"$REAL_GIT" init "$CONSENT_OVERRIDE_REPO"
+"$REAL_GIT" -C "$CONSENT_OVERRIDE_REPO" remote add origin "$CONSENT_OVERRIDE_REMOTE"
+echo "x" > "$CONSENT_OVERRIDE_REPO/f.txt"
+"$REAL_GIT" -C "$CONSENT_OVERRIDE_REPO" add .
+"$REAL_GIT" -C "$CONSENT_OVERRIDE_REPO" commit -m "initial"
+"$REAL_GIT" -C "$CONSENT_OVERRIDE_REPO" push -u origin main
+# Global uses "false" (denies), repo uses "cat" (approves)
+OVERRIDE_GLOBAL="$TMPDIR_ROOT/override-global.json"
+cat > "$OVERRIDE_GLOBAL" <<'EOF'
+{
+  "consent_command": "false",
+  "blocked": [{ "command": "push", "flags": ["--force"], "action": "consent", "message": "needs consent" }]
+}
+EOF
+cat > "$CONSENT_OVERRIDE_REPO/.git-safety.json" <<'EOF'
+{ "consent_command": "cat" }
+EOF
+# First attempt: get consent file path
+override_output=$(LAWFUL_GIT_GLOBAL_CONFIG="$OVERRIDE_GLOBAL" git -C "$CONSENT_OVERRIDE_REPO" push --force 2>&1) || true
+override_consent_file=$(echo "$override_output" | grep -A1 "write your justification to:" | tail -1 | sed 's/^[[:space:]]*//' | tr -d '[:space:]')
+if [ -n "$override_consent_file" ] && echo "$override_consent_file" | grep -q "^/"; then
+    echo "repo overrides consent" > "$override_consent_file"
+    # Repo's "cat" (exit 0) should win over global's "false" (exit 1)
+    LAWFUL_GIT_GLOBAL_CONFIG="$OVERRIDE_GLOBAL" assert_passes_through "consent_command repo overrides global" git -C "$CONSENT_OVERRIDE_REPO" push --force
+else
+    echo "❌ FAIL: could not set up consent override test"
+    FAIL=$((FAIL + 1))
+fi
+
+# protected_branches merge: repo wins on key conflict
+PB_MERGE_GLOBAL="$TMPDIR_ROOT/pb-merge-global.json"
+cat > "$PB_MERGE_GLOBAL" <<'EOF'
+{ "protected_branches": { "main": { "allowed_path_prefixes": ["global-only/"], "message": "global pb" } } }
+EOF
+PB_MERGE_REPO="$TMPDIR_ROOT/pbmergerepo"
+PB_MERGE_REMOTE="$TMPDIR_ROOT/pbmergeremote.git"
+"$REAL_GIT" init --bare "$PB_MERGE_REMOTE"
+"$REAL_GIT" init "$PB_MERGE_REPO"
+"$REAL_GIT" -C "$PB_MERGE_REPO" remote add origin "$PB_MERGE_REMOTE"
+mkdir -p "$PB_MERGE_REPO/repo-only"
+echo "x" > "$PB_MERGE_REPO/repo-only/f.txt"
+# Commit the .git-safety.json in the initial push so it's not in the diff
+cat > "$PB_MERGE_REPO/.git-safety.json" <<'EOF'
+{ "protected_branches": { "main": { "allowed_path_prefixes": ["repo-only/"], "message": "repo pb" } } }
+EOF
+"$REAL_GIT" -C "$PB_MERGE_REPO" add .
+"$REAL_GIT" -C "$PB_MERGE_REPO" commit -m "initial"
+"$REAL_GIT" -C "$PB_MERGE_REPO" push -u origin main
+echo "y" > "$PB_MERGE_REPO/repo-only/f.txt"
+"$REAL_GIT" -C "$PB_MERGE_REPO" add .
+"$REAL_GIT" -C "$PB_MERGE_REPO" commit -m "change"
+LAWFUL_GIT_GLOBAL_CONFIG="$PB_MERGE_GLOBAL" assert_passes_through "protected_branches repo overrides global on key conflict" git -C "$PB_MERGE_REPO" push
+
 # ── passthrough ───────────────────────────────────────────────────────────────
 echo ""
 echo "=== passthrough ==="

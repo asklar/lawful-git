@@ -26,7 +26,7 @@ All logic lives in `main.go` — there are no packages or subdirectories. The fl
 
 1. `findRealGit()` — walks PATH to locate the actual git binary, skipping itself
 2. `parseGlobalOpts()` — strips git's global flags (e.g. `-C <path>`) to find the subcommand index; sets `gitContext` for subprocess calls
-3. `loadConfig()` — resolves the repo root via `git rev-parse --show-toplevel`, reads `.git-safety.json`; returns nil (passthrough) if not in a repo or no config
+3. `loadConfig()` — loads global config (`~/.lawful-git.json` or `$LAWFUL_GIT_GLOBAL_CONFIG`), then repo config (`.git-safety.json`), merges them (arrays union, booleans OR, maps merge with repo winning on conflict), and validates the result. Returns nil (passthrough) if no config exists at all.
 4. `applyRules()` — checks all rule types against the parsed args; calls `block()` (print to stderr + exit 1) on violation
 5. `execRealGit()` — on Unix, replaces the process via `syscall.Exec`; on Windows, runs git as a child and forwards the exit code
 
