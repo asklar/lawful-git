@@ -6,19 +6,20 @@ A data-driven git guardrail engine for AI agent sessions. `lawful-git` is a drop
 
 ---
 
-## What it is
+## How it works
 
 When invoked as `git`, `lawful-git`:
 
 1. Loads global config (`~/.lawful-git.json`) and repo config (`.git-safety.json`), merging them
-2. If no config exists, execs the real git unchanged
-3. If config exists, enforces all rules against the command
-4. On rule violation: prints `❌ BLOCKED: <message>` to stderr and exits 1
-5. On success: `exec`s (replacing the process on Unix, forwarding exit code on Windows) the real git with all original args
+2. If no config exists, passes through to the real git unchanged
+3. If a rule is violated:
+   - **Hard block** → prints `❌ BLOCKED: <message>` and exits 1
+   - **Consent rule** → prompts the user for approval via a native dialog (or external command), proceeding only if approved
+4. If all rules pass → `exec`s the real git with all original args
 
-It produces a single static binary. Cross-platform: Linux, macOS, Windows. No runtime dependencies.
+Cross-platform (Linux, macOS, Windows). Single binary, zero dependencies.
 
-Use `git --lawful-version` to check which version of lawful-git is installed.
+Use `git --lawful-version` to check which version is installed.
 
 ---
 
