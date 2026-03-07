@@ -93,14 +93,14 @@ Place `.git-safety.json` in the root of the repository you want to guard. All ke
   // Commands/flags/subcommands to block outright
   "blocked": [
     { "command": "clean",   "message": "git clean deletes untracked files." },
-    { "command": "push",    "flag": "--force",      "message": "Force push is blocked." },
-    { "command": "push",    "flag": "-f",           "message": "Force push is blocked." },
+    { "command": "push",    "flags": ["--force", "--force-with-lease", "-f"],
+      "message": "Force push is blocked." },
     { "command": "stash",   "subcommand": "drop",   "message": "git stash drop can lose stashed work." },
-    { "command": "commit",  "flag_in_bundle": "a",  "message": "git commit -a stages all changes implicitly." },
+    { "command": "commit",  "flags": ["-a"],         "message": "git commit -a stages all changes implicitly." },
 
     // Consent rules: soft-block that allows override with justification
-    { "command": "push",  "flag": "--force-with-lease", "action": "consent",
-      "message": "Force-with-lease push requires consent." }
+    { "command": "push",  "flags": ["--delete", "-d"], "action": "consent",
+      "message": "Remote branch deletion requires consent." }
   ],
 
   // Commands that must include at least one of the listed flags
@@ -142,8 +142,7 @@ Blocks a git invocation when **all specified fields** match:
 |---|---|---|
 | `command` | `os.Args[1]` | `"push"` |
 | `subcommand` | `os.Args[2]` | `"drop"` |
-| `flag` | exact flag anywhere in args | `"--force"` |
-| `flag_in_bundle` | single char inside short flag bundles | `"a"` catches `-a`, `-am`, `-cam` |
+| `flags` | any flag in the array; short flags (e.g. `"-f"`) also match inside bundles (`-xvf`) | `["--force", "-f"]` |
 | `action` | what happens on match (default: `"block"`) | `"block"` or `"consent"` |
 
 When `action` is `"block"` (the default), the command is rejected immediately.
@@ -187,7 +186,7 @@ To override the built-in dialog, set `consent_command` in your config:
 {
   "consent_command": "/path/to/my-approval-tool",
   "blocked": [
-    { "command": "push", "flag": "--force", "action": "consent", "message": "Force push requires consent." }
+    { "command": "push", "flags": ["--force", "-f"], "action": "consent", "message": "Force push requires consent." }
   ]
 }
 ```

@@ -324,7 +324,7 @@ cat > "$CONSENT_REPO/.git-safety.json" <<'EOF'
 {
   "consent_command": "cat",
   "blocked": [
-    { "command": "push", "flag": "--force", "action": "consent", "message": "Force push requires consent." },
+    { "command": "push", "flags": ["--force"], "action": "consent", "message": "Force push requires consent." },
     { "command": "clean", "message": "git clean is blocked." }
   ]
 }
@@ -365,7 +365,7 @@ cat > "$CONSENT_REPO/.git-safety.json" <<'EOF'
 {
   "consent_command": "false",
   "blocked": [
-    { "command": "push", "flag": "--force", "action": "consent", "message": "Force push requires consent." }
+    { "command": "push", "flags": ["--force"], "action": "consent", "message": "Force push requires consent." }
   ]
 }
 EOF
@@ -394,7 +394,7 @@ cat > "$CONSENT_REPO/.git-safety.json" <<'EOF'
 {
   "consent_command": "cat",
   "blocked": [
-    { "command": "push", "flag": "--force", "action": "consent", "message": "Force push requires consent." }
+    { "command": "push", "flags": ["--force"], "action": "consent", "message": "Force push requires consent." }
   ]
 }
 EOF
@@ -460,7 +460,7 @@ cat > "$CONSENT_REPO/.git-safety.json" <<EOF
 {
   "consent_command": "$VALIDATE_SCRIPT",
   "blocked": [
-    { "command": "push", "flag": "--force", "action": "consent", "message": "Force push requires consent." }
+    { "command": "push", "flags": ["--force"], "action": "consent", "message": "Force push requires consent." }
   ]
 }
 EOF
@@ -479,7 +479,7 @@ cat > "$CONSENT_REPO/.git-safety.json" <<'EOF'
 {
   "consent_command": "cat",
   "blocked": [
-    { "command": "push", "flag": "--force", "action": "consent", "message": "Force push requires consent." },
+    { "command": "push", "flags": ["--force"], "action": "consent", "message": "Force push requires consent." },
     { "command": "clean", "message": "git clean is blocked." }
   ]
 }
@@ -493,7 +493,7 @@ echo "x" > "$BADACTION_REPO/f.txt"
 "$REAL_GIT" -C "$BADACTION_REPO" add .
 "$REAL_GIT" -C "$BADACTION_REPO" commit -m "initial"
 cat > "$BADACTION_REPO/.git-safety.json" <<'EOF'
-{ "blocked": [{ "command": "push", "flag": "--force", "action": "maybe", "message": "bad" }] }
+{ "blocked": [{ "command": "push", "flags": ["--force"], "action": "maybe", "message": "bad" }] }
 EOF
 assert_blocked "invalid action value rejected" git -C "$BADACTION_REPO" status
 
@@ -582,16 +582,17 @@ cat > "$EMPTY_FLAGS_REPO/.git-safety.json" <<'EOF'
 EOF
 assert_blocked "empty one_of_flags rejected" git -C "$EMPTY_FLAGS_REPO" status
 
-# flag_in_bundle with multi-char value
+# flags with short flag catches bundled usage
 BUNDLE_REPO="$TMPDIR_ROOT/bundlerepo"
 "$REAL_GIT" init "$BUNDLE_REPO"
 echo "x" > "$BUNDLE_REPO/f.txt"
 "$REAL_GIT" -C "$BUNDLE_REPO" add .
 "$REAL_GIT" -C "$BUNDLE_REPO" commit -m "initial"
 cat > "$BUNDLE_REPO/.git-safety.json" <<'EOF'
-{ "blocked": [{ "command": "commit", "flag_in_bundle": "am", "message": "bad" }] }
+{ "blocked": [{ "command": "commit", "flags": ["-a"], "message": "no commit -a" }] }
 EOF
-assert_blocked "multi-char flag_in_bundle rejected" git -C "$BUNDLE_REPO" status
+echo "y" > "$BUNDLE_REPO/f.txt"
+assert_blocked "short flag in flags catches bundled -am" git -C "$BUNDLE_REPO" commit -am "test"
 
 # flag without leading dash
 NO_DASH_REPO="$TMPDIR_ROOT/nodashrepo"
@@ -600,7 +601,7 @@ echo "x" > "$NO_DASH_REPO/f.txt"
 "$REAL_GIT" -C "$NO_DASH_REPO" add .
 "$REAL_GIT" -C "$NO_DASH_REPO" commit -m "initial"
 cat > "$NO_DASH_REPO/.git-safety.json" <<'EOF'
-{ "blocked": [{ "command": "push", "flag": "force", "message": "bad" }] }
+{ "blocked": [{ "command": "push", "flags": ["force"], "message": "bad" }] }
 EOF
 assert_blocked "flag without dash rejected" git -C "$NO_DASH_REPO" status
 
@@ -649,8 +650,8 @@ echo "x" > "$UNSAT_REPO/f.txt"
 cat > "$UNSAT_REPO/.git-safety.json" <<'EOF'
 {
   "blocked": [
-    { "command": "push", "flag": "--force", "message": "no force" },
-    { "command": "push", "flag": "-f", "message": "no force" }
+    { "command": "push", "flags": ["--force"], "message": "no force" },
+    { "command": "push", "flags": ["-f"], "message": "no force" }
   ],
   "require": [{ "command": "push", "one_of_flags": ["--force", "-f"], "message": "must force" }]
 }

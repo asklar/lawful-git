@@ -33,7 +33,7 @@ All logic lives in `main.go` — there are no packages or subdirectories. The fl
 ## Key conventions
 
 - **Rule types** in `.git-safety.json` map directly to code sections in `applyRules()`: `blocked`, `require`, `scoped_paths`, `worktree_only_branches`, `check_dirty_on_checkout`, `require_upstream_before_bare_push`, `protected_branches`. When adding a new rule type, add a new struct, a new field on `Config`, and a new section in `applyRules()`.
-- **Blocked rules** use AND logic: all specified fields (command, subcommand, flag, flag_in_bundle) must match for the rule to fire.
+- **Blocked rules** use AND logic: all specified fields (command, subcommand, flags) must match for the rule to fire. Short flags in the `flags` array (e.g. `"-f"`) also match inside bundled flags (e.g. `-xvf`).
 - `block()` is the single exit path for violations — it prints `❌ BLOCKED: <message>` to stderr and exits 1. Tests rely on this exact prefix.
 - Cross-platform: the binary must compile for Linux, macOS, and Windows. `execRealGit()` handles the platform split. The `go.mod` targets Go 1.21 with zero external dependencies.
 - **Fail-closed on config errors**: if `.git-safety.json` exists but is malformed, lawful-git exits with an error rather than silently disabling rules.

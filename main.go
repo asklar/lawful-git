@@ -13,12 +13,11 @@ import (
 
 // BlockedRule represents a rule that blocks a git command or flag.
 type BlockedRule struct {
-	Command      string `json:"command"`
-	Subcommand   string `json:"subcommand"`
-	Flag         string `json:"flag"`
-	FlagInBundle string `json:"flag_in_bundle"`
-	Message      string `json:"message"`
-	Action       string `json:"action"` // "block" (default) or "consent"
+	Command    string   `json:"command"`
+	Subcommand string   `json:"subcommand"`
+	Flags      []string `json:"flags"`
+	Message    string   `json:"message"`
+	Action     string   `json:"action"` // "block" (default) or "consent"
 }
 
 // RequireRule requires at least one of the listed flags to be present.
@@ -208,11 +207,10 @@ func validateConfig(cfg *Config) error {
 		if rule.Message == "" {
 			return cfgErr("blocked[%d]: message is required", i)
 		}
-		if rule.Flag != "" && !strings.HasPrefix(rule.Flag, "-") {
-			return cfgErr("blocked[%d]: flag %q must start with '-'", i, rule.Flag)
-		}
-		if rule.FlagInBundle != "" && len(rule.FlagInBundle) != 1 {
-			return cfgErr("blocked[%d]: flag_in_bundle %q must be exactly one character", i, rule.FlagInBundle)
+		for j, f := range rule.Flags {
+			if !strings.HasPrefix(f, "-") {
+				return cfgErr("blocked[%d]: flags[%d] %q must start with '-'", i, j, f)
+			}
 		}
 		if rule.Subcommand != "" && strings.HasPrefix(rule.Subcommand, "-") {
 			return cfgErr("blocked[%d]: subcommand %q must not start with '-'", i, rule.Subcommand)
@@ -220,10 +218,10 @@ func validateConfig(cfg *Config) error {
 		if rule.Action != "" && rule.Action != "block" && rule.Action != "consent" {
 			return cfgErr("blocked[%d]: action must be \"block\" or \"consent\", got %q", i, rule.Action)
 		}
-		if rule.Flag != "" {
-			blockedSet[cmdFlag{rule.Command, rule.Flag}] = true
+		for _, f := range rule.Flags {
+			blockedSet[cmdFlag{rule.Command, f}] = true
 		}
-		if rule.Flag == "" && rule.Subcommand == "" && rule.FlagInBundle == "" {
+		if len(rule.Flags) == 0 && rule.Subcommand == "" {
 			bareBlockedCmds[rule.Command] = true
 		}
 	}
@@ -582,13 +580,22 @@ func applyRules(cfg *Config, args []string) {
 				continue
 			}
 		}
-		if rule.Flag != "" {
-			if !hasFlag(rest, rule.Flag) {
-				continue
+		if len(rule.Flags) > 0 {
+			matched := false
+			for _, f := range rule.Flags {
+				if hasFlag(rest, f) {
+					matched = true
+					break
+				}
+				// Single-char short flags (e.g. "-f") also match inside bundles
+				if len(f) == 2 && f[0] == '-' && f[1] != '-' {
+					if hasFlagInBundle(rest, string(f[1])) {
+						matched = true
+						break
+					}
+				}
 			}
-		}
-		if rule.FlagInBundle != "" {
-			if !hasFlagInBundle(rest, rule.FlagInBundle) {
+			if !matched {
 				continue
 			}
 		}
