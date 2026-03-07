@@ -44,27 +44,11 @@ sudo rm -rf /usr/local/lib/lawful-git
 
 ### Windows (PowerShell)
 
-Download the latest `.exe` from [Releases](https://github.com/asklar/lawful-git/releases), then:
-
 ```powershell
-# Place it ahead of real git on PATH
-$dir = "$env:LOCALAPPDATA\lawful-git"
-New-Item -ItemType Directory -Path $dir -Force
-Move-Item lawful-git-windows-amd64.exe "$dir\git.exe"
-# Prepend to user PATH (persists across restarts)
-$path = [Environment]::GetEnvironmentVariable('PATH', 'User')
-if ($path -notlike "*$dir*") { [Environment]::SetEnvironmentVariable('PATH', "$dir;$path", 'User') }
+iex (iwr https://raw.githubusercontent.com/asklar/lawful-git/main/install.ps1).Content
 ```
 
-Or build from source (requires Go 1.21+):
-
-```powershell
-git clone https://github.com/asklar/lawful-git
-cd lawful-git
-.\install.ps1
-```
-
-Installs to `$env:LOCALAPPDATA\lawful-git\git.exe` and prepends that directory to the user `PATH` (ahead of the real git).
+Auto-detects architecture, downloads the latest release binary, installs as `git.exe` at `$env:LOCALAPPDATA\lawful-git\`, and prepends to user PATH.
 
 #### Uninstall (Windows)
 

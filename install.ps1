@@ -1,68 +1,54 @@
 # install.ps1 — install lawful-git on Windows
+# Usage: iex (iwr https://raw.githubusercontent.com/asklar/lawful-git/main/install.ps1).Content
 #Requires -Version 5.1
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $InstallDir = "$env:LOCALAPPDATA\lawful-git"
-$ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$Target = Join-Path $InstallDir "git.exe"
+$Repo = "asklar/lawful-git"
 
 Write-Host "lawful-git installer"
 Write-Host "===================="
 
+# Detect architecture
+$Arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "amd64" }
+Write-Host "Platform: windows-$Arch"
+
 # Find real git
 $realGitCmd = Get-Command git -ErrorAction SilentlyContinue
 if (-not $realGitCmd) {
-    Write-Error "git not found in PATH. Please install Git for Windows first."
+    Write-Error "git not found in PATH. Install Git for Windows first."
     exit 1
 }
-$realGit = $realGitCmd.Source
-Write-Host "Real git: $realGit"
+Write-Host "Real git: $($realGitCmd.Source)"
 
-# Check if git.exe already exists at install location
-$target = Join-Path $InstallDir "git.exe"
-if (Test-Path $target) {
-    Write-Error "$target already exists. Remove it first or manually update it."
+if (Test-Path $Target) {
+    Write-Error "$Target already exists. Remove it first to reinstall."
     exit 1
 }
 
-Write-Host ""
-Write-Host "Install plan:"
-Write-Host "  Binary:  $target (lawful-git renamed to git.exe)"
-Write-Host "  Prepend $InstallDir to user PATH (ahead of real git)"
-Write-Host ""
-$answer = Read-Host "Proceed? [y/N]"
-if ($answer -notmatch '^[Yy]$') {
-    Write-Host "Aborted."
-    exit 0
-}
+# Download
+$BinaryName = "lawful-git-windows-$Arch.exe"
+$Url = "https://github.com/$Repo/releases/latest/download/$BinaryName"
+Write-Host "Downloading $Url ..."
 
-# Build the binary
-Write-Host "Building lawful-git..."
-Push-Location $ScriptDir
-go build -o lawful-git.exe .
-Pop-Location
-
-# Install binary as git.exe so it intercepts git calls
 if (-not (Test-Path $InstallDir)) {
     New-Item -ItemType Directory -Path $InstallDir | Out-Null
 }
-Copy-Item (Join-Path $ScriptDir "lawful-git.exe") $target
+Invoke-WebRequest -Uri $Url -OutFile $Target
 
-# Prepend install dir to user PATH (ahead of real git)
-$currentPath = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
+# Add to PATH
+$currentPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
 if ($currentPath -notlike "*$InstallDir*") {
-    [System.Environment]::SetEnvironmentVariable('PATH', "$InstallDir;$currentPath", 'User')
+    [Environment]::SetEnvironmentVariable('PATH', "$InstallDir;$currentPath", 'User')
+    $env:PATH = "$InstallDir;$env:PATH"
     Write-Host "Added $InstallDir to user PATH."
-} else {
-    Write-Host "$InstallDir is already in user PATH."
 }
 
 Write-Host ""
-Write-Host "✅ lawful-git installed successfully."
-Write-Host ""
-Write-Host "Restart your terminal or run the following to use lawful-git:"
-Write-Host "  `$env:PATH = `"$InstallDir;`$env:PATH`""
+Write-Host "lawful-git installed successfully."
 Write-Host ""
 Write-Host "To uninstall:"
-Write-Host "  Remove-Item '$target'"
+Write-Host "  Remove-Item '$Target'"
 Write-Host "  # Remove '$InstallDir' from your user PATH in System Properties"
