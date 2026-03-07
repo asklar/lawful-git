@@ -35,8 +35,7 @@ $RealGitDir = Split-Path $realGitCmd.Source
 Write-Host "Real git: $($realGitCmd.Source)"
 
 if (Test-Path $Target) {
-    Write-Error "$Target already exists. Remove it first to reinstall."
-    exit 1
+    Write-Host "Updating existing lawful-git installation..."
 }
 
 # Download

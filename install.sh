@@ -37,11 +37,16 @@ if [ -z "$REAL_GIT" ]; then
 fi
 echo "Real git: $REAL_GIT"
 
-# Check if symlink target already exists
+# Check if already installed — update if so
 if [ -e "$SYMLINK" ]; then
-    echo "❌ $SYMLINK already exists." >&2
-    echo "   Remove it first if you want to reinstall." >&2
-    exit 1
+    EXISTING="$(readlink -f "$SYMLINK" 2>/dev/null || true)"
+    if [ "$EXISTING" = "$INSTALL_DIR/lawful-git" ]; then
+        echo "Updating existing lawful-git installation..."
+    else
+        echo "❌ $SYMLINK exists but does not point to lawful-git." >&2
+        echo "   Remove it first if you want to install." >&2
+        exit 1
+    fi
 fi
 
 # Download binary
@@ -64,7 +69,9 @@ fi
 sudo mkdir -p "$INSTALL_DIR"
 sudo mv "$TMPFILE" "$INSTALL_DIR/lawful-git"
 sudo chmod +x "$INSTALL_DIR/lawful-git"
-sudo ln -s "$INSTALL_DIR/lawful-git" "$SYMLINK"
+if [ ! -e "$SYMLINK" ]; then
+    sudo ln -s "$INSTALL_DIR/lawful-git" "$SYMLINK"
+fi
 
 echo ""
 echo "✅ lawful-git installed successfully."
