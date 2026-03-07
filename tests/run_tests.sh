@@ -498,6 +498,15 @@ cat > "$BADACTION_REPO/.git-safety.json" <<'EOF'
 { "blocked": [{ "command": "push", "flags": ["--force"], "action": "maybe", "message": "bad" }] }
 EOF
 assert_blocked "invalid action value rejected" git -C "$BADACTION_REPO" status
+# Verify config errors include docs link
+badaction_output=$(git -C "$BADACTION_REPO" status 2>&1) || true
+if echo "$badaction_output" | grep -qF "github.com/asklar/lawful-git#configuration-reference"; then
+    echo "✅ PASS: config error includes docs link"
+    PASS=$((PASS + 1))
+else
+    echo "❌ FAIL: config error missing docs link (got: $badaction_output)"
+    FAIL=$((FAIL + 1))
+fi
 
 # Invalid consent_command path
 BAD_CONSENT_REPO="$TMPDIR_ROOT/badconsentrepo"
@@ -512,6 +521,21 @@ cat > "$BAD_CONSENT_REPO/.git-safety.json" <<'EOF'
 }
 EOF
 assert_blocked "invalid consent_command path rejected" git -C "$BAD_CONSENT_REPO" status
+bad_consent_output=$(git -C "$BAD_CONSENT_REPO" status 2>&1) || true
+if echo "$bad_consent_output" | grep -qF "consent_command" && echo "$bad_consent_output" | grep -qF "/nonexistent/approval-tool"; then
+    echo "✅ PASS: consent_command error names the bad path"
+    PASS=$((PASS + 1))
+else
+    echo "❌ FAIL: consent_command error missing path details (got: $bad_consent_output)"
+    FAIL=$((FAIL + 1))
+fi
+if echo "$bad_consent_output" | grep -qF "github.com/asklar/lawful-git#configuration-reference"; then
+    echo "✅ PASS: consent_command error includes docs link"
+    PASS=$((PASS + 1))
+else
+    echo "❌ FAIL: consent_command error missing docs link (got: $bad_consent_output)"
+    FAIL=$((FAIL + 1))
+fi
 
 # ── additional edge cases ─────────────────────────────────────────────────────
 echo ""
