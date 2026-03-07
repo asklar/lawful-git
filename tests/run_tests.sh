@@ -918,6 +918,65 @@ popd > /dev/null
 rm -f "$REPO/my-project/symlink-test.txt"
 rm -f "$SYMLINK_DIR"
 
+# Symlink into blocked dir: git add from symlinked dir outside allowed prefix
+SYMLINK_BLOCKED="$TMPDIR_ROOT/other-link"
+ln -s "$REPO/other" "$SYMLINK_BLOCKED"
+mkdir -p "$REPO/other"
+echo "blocked via symlink" > "$REPO/other/blocked-sym.txt"
+pushd "$SYMLINK_BLOCKED" > /dev/null
+assert_blocked "scoped path from symlink into blocked dir" git add blocked-sym.txt
+popd > /dev/null
+rm -f "$REPO/other/blocked-sym.txt"
+rm -f "$SYMLINK_BLOCKED"
+
+# Relative path with ../ from subdirectory: ../other/file.txt should resolve to other/file.txt (blocked)
+mkdir -p "$REPO/other"
+echo "dotdot" > "$REPO/other/dotdot.txt"
+pushd "$REPO/my-project" > /dev/null
+assert_blocked "relative ../ path from subdirectory blocked" git add ../other/dotdot.txt
+popd > /dev/null
+rm -f "$REPO/other/dotdot.txt"
+
+# ./ prefix from subdirectory: ./foo.txt should resolve to my-project/foo.txt (allowed)
+echo "dotslash" > "$REPO/my-project/dotslash.txt"
+pushd "$REPO/my-project" > /dev/null
+assert_passes_through "./foo from subdirectory allowed" git add ./dotslash.txt
+popd > /dev/null
+rm -f "$REPO/my-project/dotslash.txt"
+
+# ././ redundant from subdirectory: still resolves correctly
+echo "multidot" > "$REPO/my-project/multidot.txt"
+pushd "$REPO/my-project" > /dev/null
+assert_passes_through "././foo from subdirectory allowed" git add ././multidot.txt
+popd > /dev/null
+rm -f "$REPO/my-project/multidot.txt"
+
+# ./../my-project/foo.txt from subdirectory: resolves to my-project/foo.txt (allowed)
+echo "updntest" > "$REPO/my-project/updntest.txt"
+pushd "$REPO/my-project" > /dev/null
+assert_passes_through "./../my-project/file from subdirectory allowed" git add ./../my-project/updntest.txt
+popd > /dev/null
+rm -f "$REPO/my-project/updntest.txt"
+
+# ../other from my-project/ blocked even with ./ prefix
+mkdir -p "$REPO/other"
+echo "escape" > "$REPO/other/escape.txt"
+pushd "$REPO/my-project" > /dev/null
+assert_blocked "./../other escape from subdirectory blocked" git add ./../other/escape.txt
+popd > /dev/null
+rm -f "$REPO/other/escape.txt"
+
+# ./.. from subdirectory resolves to repo root "." which is in blocked_paths
+pushd "$REPO/my-project" > /dev/null
+assert_blocked "./.. from subdirectory resolves to blocked root" git add ./..
+popd > /dev/null
+
+# blocked_paths from subdirectory: git add . from my-project/ should resolve to my-project/ (not ".")
+pushd "$REPO/my-project" > /dev/null
+# "." from subdirectory resolves to "my-project" which is not the bare "." in blocked_paths
+assert_passes_through "blocked_paths . from subdirectory is not bare dot" git add .
+popd > /dev/null
+
 # Worktree: config discovered from main repo
 WORKTREE_REPO="$TMPDIR_ROOT/worktreerepo"
 "$REAL_GIT" init "$WORKTREE_REPO"

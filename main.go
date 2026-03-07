@@ -793,7 +793,8 @@ func applyRules(cfg *Config, args []string) {
 			cleanArg := filepath.Clean(toRepoRelative(arg))
 			allowed := false
 			for _, prefix := range rule.AllowedPrefixes {
-				if strings.HasPrefix(cleanArg, prefix) {
+				// Match both "my-project/foo.txt" and "my-project" against prefix "my-project/"
+				if strings.HasPrefix(cleanArg, prefix) || strings.HasPrefix(cleanArg+"/", prefix) {
 					allowed = true
 					break
 				}
