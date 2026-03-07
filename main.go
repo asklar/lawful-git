@@ -336,13 +336,14 @@ func requestConsent(cfg *Config, msg string, args []string) {
 
 	// Justification file exists — prompt for consent.
 	justText := strings.TrimSpace(string(justification))
-	if justText == "" {
-		fmt.Fprintf(os.Stderr, "❌ BLOCKED: Justification file is empty: %s\n", consentFile)
-		os.Exit(1)
-	}
 
 	// Always remove the consent file after reading (one-time use).
-	defer os.Remove(consentFile)
+	os.Remove(consentFile)
+
+	if justText == "" {
+		fmt.Fprintf(os.Stderr, "❌ BLOCKED: Justification file is empty.\n")
+		os.Exit(1)
+	}
 
 	approved := false
 	if cfg.ConsentCommand != "" {
