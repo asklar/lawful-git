@@ -375,7 +375,15 @@ deny_consent_file=$(echo "$deny_output" | grep -A1 "write your justification to:
 if [ -n "$deny_consent_file" ] && echo "$deny_consent_file" | grep -q "^/"; then
     echo "I really want to force push" > "$deny_consent_file"
     assert_blocked "consent_command denial blocks operation" git -C "$CONSENT_REPO" push --force
-    rm -f "$deny_consent_file"
+    # Verify consent file was cleaned up even after denial
+    if [ ! -f "$deny_consent_file" ]; then
+        echo "✅ PASS: consent file cleaned up after denial"
+        PASS=$((PASS + 1))
+    else
+        echo "❌ FAIL: consent file not cleaned up after denial"
+        FAIL=$((FAIL + 1))
+        rm -f "$deny_consent_file"
+    fi
 else
     echo "❌ FAIL: could not set up denial test"
     FAIL=$((FAIL + 1))
@@ -402,7 +410,15 @@ if [ -n "$empty_consent_file" ] && echo "$empty_consent_file" | grep -q "^/"; th
         echo "❌ FAIL: empty justification file not rejected (got: $empty_retry_output)"
         FAIL=$((FAIL + 1))
     fi
-    rm -f "$empty_consent_file"
+    # Verify consent file was cleaned up even with empty justification
+    if [ ! -f "$empty_consent_file" ]; then
+        echo "✅ PASS: consent file cleaned up after empty justification"
+        PASS=$((PASS + 1))
+    else
+        echo "❌ FAIL: consent file not cleaned up after empty justification"
+        FAIL=$((FAIL + 1))
+        rm -f "$empty_consent_file"
+    fi
 else
     echo "❌ FAIL: could not set up empty justification test"
     FAIL=$((FAIL + 1))
