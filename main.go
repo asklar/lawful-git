@@ -246,6 +246,21 @@ func loadConfig() (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
+		// In a worktree, --show-toplevel returns the worktree root.
+		// If no config found there, check the main repo root.
+		if repoCfg == nil {
+			commonDir, cdErr := runGitOutput("rev-parse", "--git-common-dir")
+			if cdErr == nil && commonDir != "" {
+				mainRoot := filepath.Dir(commonDir) // --git-common-dir returns .git path
+				if mainRoot != root {
+					mainConfigPath := filepath.Join(mainRoot, ".lawful-git.json")
+					repoCfg, err = parseConfigFile(mainConfigPath, ".lawful-git.json")
+					if err != nil {
+						return nil, err
+					}
+				}
+			}
+		}
 		repoRoot = filepath.FromSlash(root)
 	}
 
@@ -651,6 +666,30 @@ func positionalArgs(args []string) []string {
 	return result
 }
 
+// repoPrefix caches the result of `git rev-parse --show-prefix` (CWD relative to repo root).
+var repoPrefix string
+var repoPrefixOnce bool
+
+func getRepoPrefix() string {
+	if !repoPrefixOnce {
+		repoPrefixOnce = true
+		repoPrefix, _ = runGitOutput("rev-parse", "--show-prefix")
+	}
+	return repoPrefix
+}
+
+// toRepoRelative converts a CWD-relative path to a repo-root-relative path.
+func toRepoRelative(arg string) string {
+	if filepath.IsAbs(arg) {
+		return arg
+	}
+	prefix := getRepoPrefix()
+	if prefix == "" {
+		return arg // already at repo root
+	}
+	return filepath.Join(prefix, arg)
+}
+
 // applyRules checks all configured rules against the parsed argv and calls block() on violation.
 func applyRules(cfg *Config, args []string) {
 	if len(args) == 0 {
@@ -734,9 +773,9 @@ func applyRules(cfg *Config, args []string) {
 		hasBroadFlag := hasFlag(rest, "-A") || hasFlag(rest, "--all")
 		posArgs := positionalArgs(rest)
 
-		// Block explicitly listed paths
+		// Block explicitly listed paths (resolved to repo-relative)
 		for _, arg := range posArgs {
-			cleanArg := filepath.Clean(arg)
+			cleanArg := filepath.Clean(toRepoRelative(arg))
 			for _, bp := range rule.BlockedPaths {
 				if cleanArg == bp {
 					block(rule.Message)
@@ -749,9 +788,9 @@ func applyRules(cfg *Config, args []string) {
 			block(rule.Message)
 		}
 
-		// All positional args must start with an allowed prefix
+		// All positional args must start with an allowed prefix (repo-relative)
 		for _, arg := range posArgs {
-			cleanArg := filepath.Clean(arg)
+			cleanArg := filepath.Clean(toRepoRelative(arg))
 			allowed := false
 			for _, prefix := range rule.AllowedPrefixes {
 				if strings.HasPrefix(cleanArg, prefix) {

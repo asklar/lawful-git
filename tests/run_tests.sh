@@ -889,6 +889,51 @@ assert_passes_through "scoped path ./allowed prefix works" git -C "$REPO" add ./
 # blocked_paths bypass: ./. should still match "." blocked path
 assert_blocked "blocked_paths ./. normalized to ." git -C "$REPO" add ./.
 
+# ── subdirectory and symlink path resolution ──────────────────────────────────
+echo ""
+echo "=== subdirectory and symlink path resolution ==="
+
+# Scoped paths from a subdirectory: git add file.txt from my-project/ should resolve to my-project/file.txt
+echo "subdir test" > "$REPO/my-project/subdir-test.txt"
+pushd "$REPO/my-project" > /dev/null
+assert_passes_through "scoped path from subdirectory allowed" git add subdir-test.txt
+popd > /dev/null
+rm -f "$REPO/my-project/subdir-test.txt"
+
+# Scoped paths from subdirectory: file outside allowed prefix blocked
+mkdir -p "$REPO/other"
+echo "outside" > "$REPO/other/outside.txt"
+pushd "$REPO/other" > /dev/null
+assert_blocked "scoped path from subdirectory outside prefix blocked" git add outside.txt
+popd > /dev/null
+rm -f "$REPO/other/outside.txt"
+
+# Symlink into repo: git add from symlinked directory
+SYMLINK_DIR="$TMPDIR_ROOT/myproject-link"
+ln -s "$REPO/my-project" "$SYMLINK_DIR"
+echo "symlink test" > "$REPO/my-project/symlink-test.txt"
+pushd "$SYMLINK_DIR" > /dev/null
+assert_passes_through "scoped path from symlink into allowed dir" git add symlink-test.txt
+popd > /dev/null
+rm -f "$REPO/my-project/symlink-test.txt"
+rm -f "$SYMLINK_DIR"
+
+# Worktree: config discovered from main repo
+WORKTREE_REPO="$TMPDIR_ROOT/worktreerepo"
+"$REAL_GIT" init "$WORKTREE_REPO"
+mkdir -p "$WORKTREE_REPO/allowed"
+echo "x" > "$WORKTREE_REPO/allowed/f.txt"
+"$REAL_GIT" -C "$WORKTREE_REPO" add .
+"$REAL_GIT" -C "$WORKTREE_REPO" commit -m "initial"
+cat > "$WORKTREE_REPO/.lawful-git.json" <<'EOF'
+{ "blocked": [{ "command": "clean", "message": "worktree config found" }] }
+EOF
+"$REAL_GIT" -C "$WORKTREE_REPO" add .lawful-git.json
+"$REAL_GIT" -C "$WORKTREE_REPO" commit -m "add config"
+WORKTREE_DIR="$TMPDIR_ROOT/myworktree"
+"$REAL_GIT" -C "$WORKTREE_REPO" worktree add "$WORKTREE_DIR" -b wt-branch
+assert_blocked "worktree discovers config from main repo" git -C "$WORKTREE_DIR" clean -fd
+
 # LAWFUL_GIT_CONSOLE_CONSENT forces terminal mode (we can't test interactive input,
 # but we can verify it doesn't crash and doesn't show GUI)
 CONSOLE_CONSENT_REPO="$TMPDIR_ROOT/consoleconsentrepo"
