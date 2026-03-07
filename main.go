@@ -439,7 +439,7 @@ func runConsentCommand(command, msg, justification string, args []string) bool {
 }
 
 // showConsentDialog shows a platform-native dialog asking the user to approve.
-// Falls back to a terminal prompt if no GUI is available.
+// Set LAWFUL_GIT_CONSOLE_CONSENT=1 to force terminal prompt instead of GUI.
 func showConsentDialog(msg, justification string, args []string) bool {
 	branch, _ := runGitOutput("rev-parse", "--abbrev-ref", "HEAD")
 	if branch == "" {
@@ -450,36 +450,11 @@ func showConsentDialog(msg, justification string, args []string) bool {
 		"Repo:   %s\nBranch: %s\nAction: git %s\n\nRule: %s\n\nJustification from agent:\n\"%s\"\n\nAllow this operation?",
 		repoRoot, branch, strings.Join(args, " "), msg, justification)
 
-	switch runtime.GOOS {
-	case "windows":
-		return showDialogWindows(prompt)
-	case "darwin":
-		return showDialogMacOS(prompt)
-	default:
-		return showDialogLinux(prompt)
+	if os.Getenv("LAWFUL_GIT_CONSOLE_CONSENT") != "" {
+		return showDialogTerminal(prompt)
 	}
-}
 
-// showDialogWindows calls Win32 MessageBox via PowerShell's Windows Forms.
-// Falls back to terminal prompt if PowerShell is unavailable.
-func showDialogWindows(prompt string) bool {
-	escaped := strings.ReplaceAll(prompt, `"`, "`\"")
-	escaped = strings.ReplaceAll(escaped, "\n", "`n")
-	script := fmt.Sprintf(
-		`Add-Type -AssemblyName System.Windows.Forms; `+
-			`$result = [System.Windows.Forms.MessageBox]::Show("%s", "lawful-git", "YesNo", "Warning"); `+
-			`if ($result -eq "Yes") { exit 0 } else { exit 1 }`,
-		escaped)
-	cmd := exec.Command("powershell", "-NoProfile", "-Command", script)
-	err := cmd.Run()
-	if err == nil {
-		return true // user clicked Yes
-	}
-	if cmd.ProcessState != nil && cmd.ProcessState.ExitCode() == 1 {
-		return false // user clicked No
-	}
-	// PowerShell failed to run entirely — fall back to terminal.
-	return showDialogTerminal(prompt)
+	return showPlatformDialog(prompt)
 }
 
 // showDialogMacOS uses osascript to show a native dialog.
@@ -502,25 +477,6 @@ func isWSL() bool {
 	}
 	lower := strings.ToLower(string(data))
 	return strings.Contains(lower, "microsoft") || strings.Contains(lower, "wsl")
-}
-
-// showDialogLinux tries WSL (Windows MessageBox), zenity, then falls back to terminal.
-func showDialogLinux(prompt string) bool {
-	if isWSL() {
-		if _, err := exec.LookPath("powershell.exe"); err == nil {
-			return showDialogWSL(prompt)
-		}
-	}
-	if _, err := exec.LookPath("zenity"); err == nil {
-		cmd := exec.Command("zenity", "--question", "--title=lawful-git",
-			"--text="+prompt, "--ok-label=Allow", "--cancel-label=Deny",
-			"--icon-name=dialog-warning", "--width=400")
-		if cmd.Run() == nil {
-			return true
-		}
-		return false
-	}
-	return showDialogTerminal(prompt)
 }
 
 // showDialogWSL calls powershell.exe to show a Windows-native MessageBox from WSL.
