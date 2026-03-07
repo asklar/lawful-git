@@ -623,6 +623,9 @@ func applyRules(cfg *Config, args []string) {
 	rest := args[1:]
 
 	// --- blocked rules ---
+	// Two-pass: check hard blocks first, then consent rules. This avoids
+	// asking for consent when a different rule would block anyway.
+	var pendingConsent []BlockedRule
 	for _, rule := range cfg.Blocked {
 		if rule.Command != command {
 			continue
@@ -661,7 +664,7 @@ func applyRules(cfg *Config, args []string) {
 			}
 		}
 		if rule.Action == "consent" {
-			requestConsent(cfg, rule.Message, args)
+			pendingConsent = append(pendingConsent, rule)
 		} else {
 			block(rule.Message)
 		}
@@ -810,6 +813,11 @@ func applyRules(cfg *Config, args []string) {
 				}
 			}
 		}
+	}
+
+	// --- consent rules (deferred until all hard rules have passed) ---
+	for _, rule := range pendingConsent {
+		requestConsent(cfg, rule.Message, args)
 	}
 }
 

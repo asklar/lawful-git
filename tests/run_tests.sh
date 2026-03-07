@@ -488,6 +488,36 @@ cat > "$CONSENT_REPO/.git-safety.json" <<'EOF'
 EOF
 assert_blocked "hard block still works with consent_command" git -C "$CONSENT_REPO" clean -fd
 
+# Hard rules fire before consent is requested (no wasted consent prompts)
+HARD_BEFORE_CONSENT_REPO="$TMPDIR_ROOT/hardbeforeconsentrepo"
+"$REAL_GIT" init "$HARD_BEFORE_CONSENT_REPO"
+echo "x" > "$HARD_BEFORE_CONSENT_REPO/f.txt"
+"$REAL_GIT" -C "$HARD_BEFORE_CONSENT_REPO" add .
+"$REAL_GIT" -C "$HARD_BEFORE_CONSENT_REPO" commit -m "initial"
+"$REAL_GIT" -C "$HARD_BEFORE_CONSENT_REPO" remote add origin "$CONSENT_REMOTE"
+# Note: NOT pushing with -u, so no upstream is configured
+cat > "$HARD_BEFORE_CONSENT_REPO/.git-safety.json" <<'EOF'
+{
+  "consent_command": "cat",
+  "require_upstream_before_bare_push": true,
+  "blocked": [
+    { "command": "push", "flags": ["--force"], "action": "consent", "message": "Force push requires consent." }
+  ]
+}
+EOF
+# push --force with no upstream should block with the upstream error, NOT ask for consent
+hard_before_consent_output=$(git -C "$HARD_BEFORE_CONSENT_REPO" push --force 2>&1) || true
+if echo "$hard_before_consent_output" | grep -qF "No upstream configured"; then
+    echo "✅ PASS: hard block fires before consent prompt"
+    PASS=$((PASS + 1))
+elif echo "$hard_before_consent_output" | grep -qF "CONSENT REQUIRED"; then
+    echo "❌ FAIL: consent was requested before hard block fired"
+    FAIL=$((FAIL + 1))
+else
+    echo "❌ FAIL: unexpected output (got: $hard_before_consent_output)"
+    FAIL=$((FAIL + 1))
+fi
+
 # Invalid action value in config
 BADACTION_REPO="$TMPDIR_ROOT/badactionrepo"
 "$REAL_GIT" init "$BADACTION_REPO"
