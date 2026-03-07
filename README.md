@@ -268,10 +268,6 @@ When `true`, blocks `git push` (with no explicit refspec) when no upstream track
 
 ---
 
-## Testing
+## Contributing
 
-```sh
-bash tests/run_tests.sh
-```
-
-The test suite builds the binary, creates an isolated temporary git repository, and runs all rule types end-to-end. It exits 0 on full pass.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for build, test, and development instructions.
