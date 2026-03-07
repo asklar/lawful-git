@@ -182,7 +182,7 @@ func loadConfig() (*Config, error) {
 	if err := validateConfig(&cfg); err != nil {
 		return nil, err
 	}
-	repoRoot = root
+	repoRoot = filepath.FromSlash(root)
 	return &cfg, nil
 }
 

@@ -426,33 +426,35 @@ fi
 
 # Validate consent_command receives correct JSON payload (repo, branch, args, message, justification)
 VALIDATE_SCRIPT="$TMPDIR_ROOT/validate_consent.sh"
-cat > "$VALIDATE_SCRIPT" <<'SCRIPT'
+CONSENT_REPO_REALPATH=$(cd "$CONSENT_REPO" && pwd -P)
+cat > "$VALIDATE_SCRIPT" <<SCRIPT
 #!/bin/bash
 # Read stdin JSON and validate all expected fields are present
-input=$(cat)
+input=\$(cat)
 ok=true
 for field in '"message"' '"justification"' '"args"' '"repo"' '"branch"'; do
-    if ! echo "$input" | grep -qF "$field"; then
-        echo "missing field: $field" >&2
+    if ! echo "\$input" | grep -qF "\$field"; then
+        echo "missing field: \$field" >&2
         ok=false
     fi
 done
-# Verify repo field matches our consent repo path
-if ! echo "$input" | grep -qF "consentrepo"; then
-    echo "repo field does not contain expected path" >&2
+# Verify repo field contains the full native path (filepath.FromSlash applied)
+if ! echo "\$input" | grep -qF "$CONSENT_REPO_REALPATH"; then
+    echo "repo field does not contain expected full path: $CONSENT_REPO_REALPATH" >&2
+    echo "got: \$input" >&2
     ok=false
 fi
 # Verify args contain --force
-if ! echo "$input" | grep -qF -- "--force"; then
+if ! echo "\$input" | grep -qF -- "--force"; then
     echo "args does not contain --force" >&2
     ok=false
 fi
 # Verify justification text is present
-if ! echo "$input" | grep -qF "payload test justification"; then
+if ! echo "\$input" | grep -qF "payload test justification"; then
     echo "justification text not found" >&2
     ok=false
 fi
-if $ok; then exit 0; else exit 1; fi
+if \$ok; then exit 0; else exit 1; fi
 SCRIPT
 chmod +x "$VALIDATE_SCRIPT"
 
