@@ -856,6 +856,7 @@ func main() {
 	cfg, err := loadConfig()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "lawful-git: config error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "See https://github.com/asklar/lawful-git#configuration-reference\n")
 		os.Exit(1)
 	}
 
