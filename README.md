@@ -31,27 +31,13 @@ Use `git --lawful-version` to check which version is installed.
 curl -fsSL https://raw.githubusercontent.com/asklar/lawful-git/main/install.sh | bash
 ```
 
-This auto-detects your OS/architecture, downloads the latest release binary, installs it, and creates a `git` symlink ahead of the real git on PATH.
-
-#### Environment variable overrides
-
-| Variable | Default | Description |
-|---|---|---|
-| `LAWFUL_GIT_INSTALL_DIR` | `/usr/local/lib/lawful-git` | Directory for the binary |
-| `LAWFUL_GIT_SYMLINK` | `/usr/local/bin/git` | Symlink path that shadows real `git` |
-
-Example with custom paths:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/asklar/lawful-git/main/install.sh | \
-  LAWFUL_GIT_INSTALL_DIR=~/.local/lib/lawful-git LAWFUL_GIT_SYMLINK=~/.local/bin/git bash
-```
+Auto-detects OS and architecture, downloads the latest release binary, and creates a `git` symlink at `/usr/local/bin/git` (ahead of real git on PATH). Requires `sudo`.
 
 #### Uninstall (Linux/macOS)
 
 ```sh
-rm /usr/local/bin/git
-rm -rf /usr/local/lib/lawful-git
+sudo rm /usr/local/bin/git
+sudo rm -rf /usr/local/lib/lawful-git
 ```
 
 ---
