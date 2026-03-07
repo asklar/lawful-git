@@ -1,0 +1,28 @@
+{
+  // lawful-git dogfood config for this repo
+  "worktree_only_branches": true,
+  "check_dirty_on_checkout": true,
+  "require_upstream_before_bare_push": true,
+
+  "blocked": [
+    { "command": "clean",                                       "message": "git clean deletes untracked files." },
+    { "command": "stash",       "subcommand": "drop",          "message": "git stash drop can lose stashed work." },
+    { "command": "stash",       "subcommand": "clear",         "message": "git stash clear can lose stashed work." },
+    { "command": "remote",      "subcommand": "set-url",       "message": "git remote set-url can redirect pushes." },
+    { "command": "push",        "flags": ["--force", "-f"],    "action": "consent", "message": "Force push rewrites remote history." },
+    { "command": "push",        "flags": ["--delete", "-d"],   "action": "consent", "message": "Remote branch deletion is destructive." },
+    { "command": "reset",       "flags": ["--hard"],           "message": "git reset --hard can lose work." },
+    { "command": "tag",         "flags": ["-d", "--delete"],   "action": "consent", "message": "Tag deletion may break release references." },
+    { "command": "commit",      "flags": ["-a"],               "message": "git commit -a stages all changes implicitly." },
+    { "command": "commit",      "flags": ["--no-verify"],      "message": "Hooks exist for a reason." },
+    { "command": "push",        "flags": ["--no-verify"],      "message": "Hooks exist for a reason." }
+  ],
+
+  "require": [
+    {
+      "command": "restore",
+      "one_of_flags": ["--staged", "-S"],
+      "message": "git restore without --staged discards uncommitted changes."
+    }
+  ]
+}
