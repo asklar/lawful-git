@@ -172,9 +172,12 @@ func loadConfig() (*Config, error) {
 		return nil, nil
 	}
 
+	// Strip JSONC comments (// and /* */) before decoding.
+	cleaned := stripJSONComments(string(data))
+
 	// Decode with strict field checking to catch typos/unknown keys.
 	var cfg Config
-	dec := json.NewDecoder(strings.NewReader(string(data)))
+	dec := json.NewDecoder(strings.NewReader(cleaned))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("invalid .git-safety.json: %w", err)
@@ -184,6 +187,58 @@ func loadConfig() (*Config, error) {
 	}
 	repoRoot = filepath.FromSlash(root)
 	return &cfg, nil
+}
+
+// stripJSONComments removes // line comments and /* */ block comments from
+// JSONC input, preserving strings (comments inside quoted strings are kept).
+func stripJSONComments(s string) string {
+	var buf strings.Builder
+	buf.Grow(len(s))
+	i := 0
+	for i < len(s) {
+		// String literal — copy verbatim including any // or /* inside.
+		if s[i] == '"' {
+			buf.WriteByte('"')
+			i++
+			for i < len(s) {
+				if s[i] == '\\' && i+1 < len(s) {
+					buf.WriteByte(s[i])
+					buf.WriteByte(s[i+1])
+					i += 2
+					continue
+				}
+				if s[i] == '"' {
+					buf.WriteByte('"')
+					i++
+					break
+				}
+				buf.WriteByte(s[i])
+				i++
+			}
+			continue
+		}
+		// Line comment — skip to end of line.
+		if i+1 < len(s) && s[i] == '/' && s[i+1] == '/' {
+			for i < len(s) && s[i] != '\n' {
+				i++
+			}
+			continue
+		}
+		// Block comment — skip to closing */.
+		if i+1 < len(s) && s[i] == '/' && s[i+1] == '*' {
+			i += 2
+			for i+1 < len(s) && !(s[i] == '*' && s[i+1] == '/') {
+				i++
+			}
+			if i+1 < len(s) {
+				i += 2 // skip */
+			}
+			continue
+		}
+		buf.WriteByte(s[i])
+		i++
+	}
+	return buf.String()
 }
 
 // cfgErr formats a config validation error with a consistent prefix.

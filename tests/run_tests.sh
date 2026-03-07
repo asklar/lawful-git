@@ -575,6 +575,52 @@ echo "content" > "$EMPTY_CFG_REPO/file.txt"
 echo '{}' > "$EMPTY_CFG_REPO/.git-safety.json"
 assert_allowed "empty config {} passes through" git -C "$EMPTY_CFG_REPO" status
 
+# JSONC: line comments (//) are supported
+JSONC_REPO="$TMPDIR_ROOT/jsoncrepo"
+"$REAL_GIT" init "$JSONC_REPO"
+echo "x" > "$JSONC_REPO/f.txt"
+"$REAL_GIT" -C "$JSONC_REPO" add .
+"$REAL_GIT" -C "$JSONC_REPO" commit -m "initial"
+cat > "$JSONC_REPO/.git-safety.json" << 'EOF'
+{
+  // This is a line comment
+  "blocked": [
+    // Block clean
+    { "command": "clean", "message": "no clean" }
+  ]
+}
+EOF
+assert_blocked "JSONC line comments work" git -C "$JSONC_REPO" clean -fd
+assert_allowed "JSONC config loads without error" git -C "$JSONC_REPO" status
+
+# JSONC: block comments (/* */) are supported
+cat > "$JSONC_REPO/.git-safety.json" << 'EOF'
+{
+  /* Block comment explaining the config */
+  "blocked": [
+    { "command": "clean", /* inline block comment */ "message": "no clean" }
+  ]
+}
+EOF
+assert_blocked "JSONC block comments work" git -C "$JSONC_REPO" clean -fd
+
+# JSONC: comments inside strings are preserved (not stripped)
+cat > "$JSONC_REPO/.git-safety.json" << 'EOF'
+{
+  "blocked": [
+    { "command": "clean", "message": "no clean // this is part of the message" }
+  ]
+}
+EOF
+clean_output=$(git -C "$JSONC_REPO" clean -fd 2>&1) || true
+if echo "$clean_output" | grep -qF "// this is part of the message"; then
+    echo "✅ PASS: comments inside strings are preserved"
+    PASS=$((PASS + 1))
+else
+    echo "❌ FAIL: comment inside string was stripped (got: $clean_output)"
+    FAIL=$((FAIL + 1))
+fi
+
 # blocked path after -- separator (git add -- .)
 assert_blocked "git add -- . blocked" git -C "$REPO" add -- .
 
