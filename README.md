@@ -221,15 +221,15 @@ The dialog shows the repo path, current branch, exact command, rule message, and
 
 Console prompt (forced via `LAWFUL_GIT_CONSOLE_CONSENT=1`):
 
-![Console consent prompt](./examples/assets/consent-console.png)
+<img src="./examples/assets/consent-console.png" width="520" alt="Console consent prompt" />
 
 Windows native dialog (default on Windows/WSL when GUI available):
 
-![Windows consent dialog](./examples/assets/consent-windows-dialog.png)
+<img src="./examples/assets/consent-windows-dialog.png" width="520" alt="Windows consent dialog" />
 
 Telegram inline buttons (via OpenClaw `consent_command` helper):
 
-![Telegram consent prompt](./examples/assets/consent-telegram.png)
+<img src="./examples/assets/consent-telegram.png" width="520" alt="Telegram consent prompt" />
 
 The platform-specific built-in behavior:
 
