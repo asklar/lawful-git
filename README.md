@@ -203,7 +203,23 @@ The consent file is deterministic (based on a hash of the repo path + command ar
 
 **Approval dialog:**
 
-The dialog shows the repo path, current branch, exact command, rule message, and the caller's justification. The platform-specific behavior:
+The dialog shows the repo path, current branch, exact command, rule message, and the caller's justification.
+
+**What this looks like:**
+
+Console prompt (forced via `LAWFUL_GIT_CONSOLE_CONSENT=1`):
+
+![Console consent prompt](./examples/assets/consent-console.png)
+
+Windows native dialog (default on Windows/WSL when GUI available):
+
+![Windows consent dialog](./examples/assets/consent-windows-dialog.png)
+
+Telegram inline buttons (via OpenClaw `consent_command` helper):
+
+![Telegram consent prompt](./examples/assets/consent-telegram.png)
+
+The platform-specific built-in behavior:
 
 | Platform | Dialog |
 |---|---|

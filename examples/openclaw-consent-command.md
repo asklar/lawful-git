@@ -2,6 +2,10 @@
 
 This integrates lawful-git consent prompts with OpenClaw + Telegram inline buttons.
 
+## Screenshots
+
+A quick visual of what this helper enables is now in the main README under the “Consent” section.
+
 ## Prereq: enable Telegram inline buttons in OpenClaw
 
 In your OpenClaw config (JSON/JSON5), enable inline buttons:
