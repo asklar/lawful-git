@@ -12,7 +12,7 @@ This integrates lawful-git consent prompts with OpenClaw + Telegram inline butto
 
 ### Windows native dialog (built-in fallback)
 
-![Windows consent dialog (illustration)](./assets/consent-windows-dialog.svg)
+![Windows consent dialog](./assets/consent-windows-dialog.png)
 
 ### Console prompt (built-in fallback)
 
