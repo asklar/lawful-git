@@ -191,13 +191,14 @@ Consent rules are soft blocks: instead of rejecting outright, they allow the cal
 
 ```mermaid
 flowchart TD
-  A[Command matches a consent rule] --> B[First attempt: block + print consent required + file path]
-  B --> C[Write justification to the file]
-  C --> D[Retry the exact same git command]
+  A[Command matches a consent rule] --> B[First attempt: block and print consent required plus file path]
+  B --> C[Write justification]
+  C --> D[Retry the same command]
   D --> E[Read justification]
   E --> F{Approval UI}
-  F -->|Approve| G[Exec real git]
-  F -->|Deny or timeout| H[Block (exit non-zero)]
+  F -->|Approve| G[Run git]
+  F -->|Deny| H[Block]
+  F -->|Timeout| H
 ```
 
 1. **First attempt** — lawful-git prints instructions and exits 1:
