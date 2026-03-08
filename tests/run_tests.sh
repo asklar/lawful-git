@@ -247,6 +247,65 @@ echo "good commit" >> "$REPO/my-project/file.txt"
 "$REAL_GIT" -C "$REPO" add my-project/file.txt
 assert_allowed "commit touching only my-project/ file allowed" git -C "$REPO" commit -m "good commit"
 
+# ── protected_branches with commit_action/push_action consent ─────────────────
+echo ""
+echo "=== protected_branches consent ==="
+PB_CONSENT_REPO="$TMPDIR_ROOT/pbconsentrepo"
+PB_CONSENT_REMOTE="$TMPDIR_ROOT/pbconsentremote.git"
+"$REAL_GIT" init --bare "$PB_CONSENT_REMOTE"
+"$REAL_GIT" init "$PB_CONSENT_REPO"
+"$REAL_GIT" -C "$PB_CONSENT_REPO" remote add origin "$PB_CONSENT_REMOTE"
+mkdir -p "$PB_CONSENT_REPO/allowed" "$PB_CONSENT_REPO/other"
+echo "a" > "$PB_CONSENT_REPO/allowed/f.txt"
+echo "b" > "$PB_CONSENT_REPO/other/f.txt"
+cat > "$PB_CONSENT_REPO/.lawful-git.json" <<'EOF'
+{
+  "consent_command": "cat",
+  "protected_branches": {
+    "main": {
+      "allowed_path_prefixes": ["allowed/"],
+      "message": "Outside allowed paths.",
+      "commit_action": "consent",
+      "push_action": "block"
+    }
+  }
+}
+EOF
+"$REAL_GIT" -C "$PB_CONSENT_REPO" add .
+"$REAL_GIT" -C "$PB_CONSENT_REPO" commit -m "initial"
+"$REAL_GIT" -C "$PB_CONSENT_REPO" push -u origin main
+
+# commit_action: consent → first attempt prints CONSENT REQUIRED
+echo "change" >> "$PB_CONSENT_REPO/other/f.txt"
+"$REAL_GIT" -C "$PB_CONSENT_REPO" add other/f.txt
+pb_consent_output=$(git -C "$PB_CONSENT_REPO" commit -m "outside allowed" 2>&1) || true
+if echo "$pb_consent_output" | grep -qF "CONSENT REQUIRED"; then
+    echo "✅ PASS: protected_branches commit_action consent prompts"
+    PASS=$((PASS + 1))
+else
+    echo "❌ FAIL: expected CONSENT REQUIRED for commit outside allowed paths (got: $pb_consent_output)"
+    FAIL=$((FAIL + 1))
+fi
+
+# Extract consent file, grant consent, retry
+pb_consent_file=$(echo "$pb_consent_output" | grep -A1 "write your justification to:" | tail -1 | sed 's/^[[:space:]]*//' | tr -d '[:space:]')
+if [ -n "$pb_consent_file" ] && echo "$pb_consent_file" | grep -q "^/"; then
+    echo "Need to fix docs in other/" > "$pb_consent_file"
+    assert_passes_through "protected_branches commit_action consent granted" git -C "$PB_CONSENT_REPO" commit -m "outside allowed"
+else
+    echo "❌ FAIL: could not extract consent file for protected_branches commit"
+    FAIL=$((FAIL + 1))
+fi
+
+# push_action: block → push of that commit is still hard-blocked
+assert_blocked "protected_branches push_action block still blocks" git -C "$PB_CONSENT_REPO" push origin main
+"$REAL_GIT" -C "$PB_CONSENT_REPO" reset --hard HEAD~1
+
+# commit inside allowed/ → no consent needed
+echo "ok" >> "$PB_CONSENT_REPO/allowed/f.txt"
+"$REAL_GIT" -C "$PB_CONSENT_REPO" add allowed/f.txt
+assert_allowed "protected_branches commit inside allowed needs no consent" git -C "$PB_CONSENT_REPO" commit -m "allowed change"
+
 # ── require_upstream_before_bare_push ──────────────────────────────────────────
 echo ""
 echo "=== require_upstream_before_bare_push ==="
@@ -549,6 +608,21 @@ else
     echo "❌ FAIL: config error missing docs link (got: $badaction_output)"
     FAIL=$((FAIL + 1))
 fi
+
+# Invalid commit_action / push_action in protected_branches
+BAD_PB_ACTION_REPO="$TMPDIR_ROOT/badpbactionrepo"
+"$REAL_GIT" init "$BAD_PB_ACTION_REPO"
+echo "x" > "$BAD_PB_ACTION_REPO/f.txt"
+"$REAL_GIT" -C "$BAD_PB_ACTION_REPO" add .
+"$REAL_GIT" -C "$BAD_PB_ACTION_REPO" commit -m "initial"
+cat > "$BAD_PB_ACTION_REPO/.lawful-git.json" <<'EOF'
+{ "protected_branches": { "main": { "allowed_path_prefixes": ["x/"], "message": "m", "commit_action": "yolo" } } }
+EOF
+assert_blocked "invalid commit_action in protected_branches rejected" git -C "$BAD_PB_ACTION_REPO" status
+cat > "$BAD_PB_ACTION_REPO/.lawful-git.json" <<'EOF'
+{ "protected_branches": { "main": { "allowed_path_prefixes": ["x/"], "message": "m", "push_action": "yolo" } } }
+EOF
+assert_blocked "invalid push_action in protected_branches rejected" git -C "$BAD_PB_ACTION_REPO" status
 
 # Invalid consent_command path
 BAD_CONSENT_REPO="$TMPDIR_ROOT/badconsentrepo"

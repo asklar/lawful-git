@@ -39,6 +39,8 @@ type ScopedPathRule struct {
 type ProtectedBranchConfig struct {
 	AllowedPathPrefixes []string `json:"allowed_path_prefixes"`
 	Message             string   `json:"message"`
+	CommitAction        string   `json:"commit_action"` // "block" (default) or "consent"
+	PushAction          string   `json:"push_action"`   // "block" (default) or "consent"
 }
 
 // Config is the top-level .lawful-git.json structure.
@@ -426,6 +428,12 @@ func validateConfig(cfg *Config) error {
 	for branch, rule := range cfg.ProtectedBranches {
 		if rule.Message == "" {
 			return cfgErr("protected_branches[%q]: message is required", branch)
+		}
+		if rule.CommitAction != "" && rule.CommitAction != "block" && rule.CommitAction != "consent" {
+			return cfgErr("protected_branches[%q]: commit_action must be \"block\" or \"consent\", got %q", branch, rule.CommitAction)
+		}
+		if rule.PushAction != "" && rule.PushAction != "block" && rule.PushAction != "consent" {
+			return cfgErr("protected_branches[%q]: push_action must be \"block\" or \"consent\", got %q", branch, rule.PushAction)
 		}
 		for _, p := range rule.AllowedPathPrefixes {
 			if err := validatePathPrefix(p); err != nil {
@@ -889,7 +897,14 @@ func applyRules(cfg *Config, args []string) {
 					}
 				}
 				if !allowed {
-					block(rule.Message)
+					if rule.PushAction == "consent" {
+						pendingConsent = append(pendingConsent, BlockedRule{
+							Action:  "consent",
+							Message: rule.Message,
+						})
+					} else {
+						block(rule.Message)
+					}
 				}
 			}
 		}
@@ -915,7 +930,14 @@ func applyRules(cfg *Config, args []string) {
 						}
 					}
 					if !allowed {
-						block(rule.Message)
+						if rule.CommitAction == "consent" {
+							pendingConsent = append(pendingConsent, BlockedRule{
+								Action:  "consent",
+								Message: rule.Message,
+							})
+						} else {
+							block(rule.Message)
+						}
 					}
 				}
 			}
