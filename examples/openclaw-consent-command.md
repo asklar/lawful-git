@@ -66,10 +66,34 @@ Set `consent_command` globally or per-repo:
 }
 ```
 
-## Decision bridge
-When you click an inline button, OpenClaw delivers `callback_data` back into the agent session as text:
+## Decision bridge (who writes `decisions.jsonl`?)
+The consent helper (`lawful-git-consent-openclaw`) is a separate process. It can send the Telegram buttons, but it **cannot receive** the callback from Telegram directly.
+
+When you click an inline button, OpenClaw delivers `callback_data` back into the OpenClaw runtime (your agent session) as a message:
 
 - `lawful:approve:<action_id>`
 - `lawful:deny:<action_id>`
 
-The agent should append a JSONL decision entry to the decisions file.
+To complete the loop, something running inside OpenClaw must translate that callback into a decision entry by appending a line to the decisions file:
+
+`~/.openclaw/consent/decisions.jsonl`
+```json
+{"action_id":"<action_id>","decision":"approve|deny","ts":"2026-03-07T16:54:23-0800"}
+```
+
+The consent helper tails/polls this file for up to 60s:
+- If it sees `approve` for the matching `action_id`, it exits **0** (lawful-git proceeds)
+- If it sees `deny`, or times out, it exits **non-zero** (lawful-git blocks)
+
+### Implementing the sink
+The simplest approach (works today) is: configure your OpenClaw agent to always write decisions.
+
+**Instruction to give your OpenClaw agent (copy/paste):**
+
+> If you receive a message exactly matching `lawful:approve:<id>` or `lawful:deny:<id>`, append a single JSONL line to `~/.openclaw/consent/decisions.jsonl` with:
+> `{ "action_id": "<id>", "decision": "approve"|"deny", "ts": "<ISO timestamp>" }`.
+> Do not write anything else.
+
+Without this sink, the helper will always time out and deny.
+
+Longer-term, OpenClaw could provide a built-in callback sink / hook so this doesn't depend on agent instructions.
