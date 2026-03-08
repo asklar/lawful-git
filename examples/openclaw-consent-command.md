@@ -86,8 +86,14 @@ The consent helper tails/polls this file for up to 60s:
 - If it sees `deny`, or times out, it exits **non-zero** (lawful-git blocks)
 
 ### Implementing the sink
-You have a few options:
-- Add a tiny handler in your OpenClaw agent that detects `lawful:(approve|deny):<id>` and appends JSONL.
-- Or add this behavior to OpenClaw itself as a built-in "consent sink".
+The simplest approach (works today) is: configure your OpenClaw agent to always write decisions.
+
+**Instruction to give your OpenClaw agent (copy/paste):**
+
+> If you receive a message exactly matching `lawful:approve:<id>` or `lawful:deny:<id>`, append a single JSONL line to `~/.openclaw/consent/decisions.jsonl` with:
+> `{ "action_id": "<id>", "decision": "approve"|"deny", "ts": "<ISO timestamp>" }`.
+> Do not write anything else.
 
 Without this sink, the helper will always time out and deny.
+
+Longer-term, OpenClaw could provide a built-in callback sink / hook so this doesn't depend on agent instructions.
