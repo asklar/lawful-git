@@ -2,6 +2,22 @@
 
 This integrates lawful-git consent prompts with OpenClaw + Telegram inline buttons.
 
+## Screenshots
+
+> These are illustrative screenshots. Real UI varies by platform/theme.
+
+### Telegram (OpenClaw inline buttons)
+
+![Telegram consent prompt (illustration)](./assets/consent-telegram.svg)
+
+### Windows native dialog (built-in fallback)
+
+![Windows consent dialog (illustration)](./assets/consent-windows-dialog.svg)
+
+### Console prompt (built-in fallback)
+
+![Console consent prompt (illustration)](./assets/consent-console.svg)
+
 ## Prereq: enable Telegram inline buttons in OpenClaw
 
 In your OpenClaw config (JSON/JSON5), enable inline buttons:

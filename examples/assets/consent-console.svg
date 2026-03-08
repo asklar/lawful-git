@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="520" viewBox="0 0 900 520">
+  <defs>
+    <style>
+      .bg{fill:#0f172a}
+      .term{fill:#020617;stroke:#334155;stroke-width:2}
+      .title{fill:#e5e7eb;font:700 18px ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+      .mono{fill:#e2e8f0;font:13px ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
+      .muted{fill:#94a3b8;font:12px ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+    </style>
+  </defs>
+  <rect class="bg" x="0" y="0" width="900" height="520"/>
+  <rect class="term" x="80" y="80" rx="14" ry="14" width="740" height="360"/>
+  <text class="title" x="110" y="125">Console consent (LAWFUL_GIT_CONSOLE_CONSENT=1)</text>
+  <text class="muted" x="110" y="150">(illustration)</text>
+
+  <text class="mono" x="120" y="195">❗ CONSENT REQUIRED: git reset --hard can lose work.</text>
+  <text class="mono" x="120" y="220">Justification file: /tmp/lawful-consent-a1b2c3d4e5f6</text>
+  <text class="mono" x="120" y="255">Write justification, then re-run the exact command.</text>
+
+  <text class="mono" x="120" y="305">Proceed? [y/N]:</text>
+</svg>
