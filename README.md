@@ -189,6 +189,18 @@ Consent rules are soft blocks: instead of rejecting outright, they allow the cal
 
 **How it works:**
 
+```mermaid
+flowchart TD
+  A[Command matches a consent rule] --> B[First attempt: block and print consent required plus file path]
+  B --> C[Write justification]
+  C --> D[Retry the same command]
+  D --> E[Read justification]
+  E --> F{Approval UI}
+  F -->|Approve| G[Run git]
+  F -->|Deny| H[Block]
+  F -->|Timeout| H
+```
+
 1. **First attempt** — lawful-git prints instructions and exits 1:
    ```
    ⚠️  CONSENT REQUIRED: Force push requires consent.
@@ -209,15 +221,15 @@ The dialog shows the repo path, current branch, exact command, rule message, and
 
 Console prompt (forced via `LAWFUL_GIT_CONSOLE_CONSENT=1`):
 
-![Console consent prompt](./examples/assets/consent-console.png)
+<img src="./examples/assets/consent-console.png" width="520" alt="Console consent prompt" />
 
 Windows native dialog (default on Windows/WSL when GUI available):
 
-![Windows consent dialog](./examples/assets/consent-windows-dialog.png)
+<img src="./examples/assets/consent-windows-dialog.png" width="520" alt="Windows consent dialog" />
 
 Telegram inline buttons (via OpenClaw `consent_command` helper):
 
-![Telegram consent prompt](./examples/assets/consent-telegram.png)
+<img src="./examples/assets/consent-telegram.png" width="520" alt="Telegram consent prompt" />
 
 The platform-specific built-in behavior:
 
