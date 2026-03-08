@@ -189,6 +189,17 @@ Consent rules are soft blocks: instead of rejecting outright, they allow the cal
 
 **How it works:**
 
+```mermaid
+flowchart TD
+  A[Risky git command matches a consent rule] --> B[First attempt: lawful-git blocks and prints\n"CONSENT REQUIRED" + justification file path]
+  B --> C[Caller writes justification to the file]
+  C --> D[Retry the exact same git command]
+  D --> E[lawful-git reads justification]
+  E --> F{Approval UI}
+  F -->|Approve| G[Exec real git]
+  F -->|Deny/Timeout| H[Block (exit non-zero)]
+```
+
 1. **First attempt** — lawful-git prints instructions and exits 1:
    ```
    ⚠️  CONSENT REQUIRED: Force push requires consent.
