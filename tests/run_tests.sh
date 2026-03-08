@@ -235,6 +235,18 @@ echo "good change" >> "$REPO/my-project/file.txt"
 "$REAL_GIT" -C "$REPO" commit -m "touch my-project only"
 assert_allowed "push touching only my-project/ file allowed" git -C "$REPO" push origin main
 
+# Commit touching non-my-project file → commit should be blocked
+echo "bad commit" >> "$REPO/other/file.txt"
+"$REAL_GIT" -C "$REPO" add other/file.txt
+assert_blocked "commit touching non-my-project file blocked" git -C "$REPO" commit -m "bad commit"
+"$REAL_GIT" -C "$REPO" reset HEAD -- other/file.txt
+"$REAL_GIT" -C "$REPO" checkout -- other/file.txt
+
+# Commit touching only my-project/ file → commit should be allowed
+echo "good commit" >> "$REPO/my-project/file.txt"
+"$REAL_GIT" -C "$REPO" add my-project/file.txt
+assert_allowed "commit touching only my-project/ file allowed" git -C "$REPO" commit -m "good commit"
+
 # ── require_upstream_before_bare_push ──────────────────────────────────────────
 echo ""
 echo "=== require_upstream_before_bare_push ==="

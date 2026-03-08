@@ -155,7 +155,7 @@ All keys are optional.
     }
   ],
 
-  // Per-branch push protection: diff against remote SHA and check file paths
+  // Per-branch commit and push protection: check file paths against allowed prefixes
   "protected_branches": {
     "main": {
       "allowed_path_prefixes": ["my-project/"],
@@ -260,7 +260,7 @@ Pair with `check_dirty_on_checkout: true` to also block `git checkout -- <file>`
 
 #### `protected_branches`
 
-When pushing to a listed branch, diffs the pushed commits against the remote tracking SHA and blocks if any changed file falls outside `allowed_path_prefixes`.
+Restricts which files may be committed or pushed on a listed branch. On `commit`, blocks if any staged file falls outside `allowed_path_prefixes`. On `push`, diffs the pushed commits against the remote tracking SHA and blocks if any changed file falls outside the allowed prefixes. This catches violations early at commit time rather than only at push time.
 
 #### `require_upstream_before_bare_push`
 

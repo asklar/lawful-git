@@ -895,6 +895,33 @@ func applyRules(cfg *Config, args []string) {
 		}
 	}
 
+	// --- protected_branches: block commit of files outside allowed prefixes ---
+	if len(cfg.ProtectedBranches) > 0 && command == "commit" {
+		branch, _ := runGitOutput("rev-parse", "--abbrev-ref", "HEAD")
+		if rule, ok := cfg.ProtectedBranches[branch]; ok {
+			files, err := runGitOutput("diff", "--cached", "--name-only")
+			if err != nil || files == "" {
+				// Nothing staged or error reading index — let git handle it
+			} else {
+				for _, f := range strings.Split(files, "\n") {
+					if f == "" {
+						continue
+					}
+					allowed := false
+					for _, prefix := range rule.AllowedPathPrefixes {
+						if strings.HasPrefix(f, prefix) {
+							allowed = true
+							break
+						}
+					}
+					if !allowed {
+						block(rule.Message)
+					}
+				}
+			}
+		}
+	}
+
 	// --- consent rules (deferred until all hard rules have passed) ---
 	for _, rule := range pendingConsent {
 		requestConsent(cfg, rule.Message, args)
