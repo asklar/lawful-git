@@ -159,7 +159,9 @@ All keys are optional.
   "protected_branches": {
     "main": {
       "allowed_path_prefixes": ["my-project/"],
-      "message": "Direct pushes to main must only touch my-project/."
+      "message": "Direct pushes to main must only touch my-project/.",
+      "commit_action": "consent",  // optional: "block" (default) or "consent"
+      "push_action": "block"       // optional: "block" (default) or "consent"
     }
   }
 }
@@ -261,6 +263,8 @@ Pair with `check_dirty_on_checkout: true` to also block `git checkout -- <file>`
 #### `protected_branches`
 
 Restricts which files may be committed or pushed on a listed branch. On `commit`, blocks if any staged file falls outside `allowed_path_prefixes`. On `push`, diffs the pushed commits against the remote tracking SHA and blocks if any changed file falls outside the allowed prefixes. This catches violations early at commit time rather than only at push time.
+
+Each branch entry supports optional `commit_action` and `push_action` fields (default `"block"`). Set either to `"consent"` to allow the operation after the user provides a justification via the consent flow.
 
 #### `require_upstream_before_bare_push`
 
